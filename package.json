@@ -1,0 +1,25 @@
+{
+  "name": "margin402",
+  "version": "1.0.0",
+  "description": "Autonomous AI Enterprise Engine on Algorand — x402 Global Challenge PreHack Entry",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently --names \"VENDORS,SERVER\" --prefix-colors \"cyan,green\" \"node mock-vendors.js\" \"node server.js\"",
+    "start:server": "node server.js",
+    "start:vendors": "node mock-vendors.js",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.12.0",
+    "@x402-avm/avm": "^2.6.1",
+    "@x402-avm/core": "^2.6.1",
+    "@x402-avm/fetch": "^2.6.1",
+    "@x402-avm/hono": "^2.6.1",
+    "dotenv": "^16.4.5",
+    "hono": "^4.5.0",
+    "openai": "^4.0.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}

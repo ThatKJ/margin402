@@ -1,25 +1,46 @@
 {
   "name": "margin402",
-  "version": "1.0.0",
-  "description": "Autonomous AI Enterprise Engine on Algorand — x402 Global Challenge PreHack Entry",
+  "version": "0.1.0",
+  "private": true,
   "type": "module",
   "scripts": {
-    "dev": "concurrently --names \"VENDORS,SERVER\" --prefix-colors \"cyan,green\" \"node mock-vendors.js\" \"node server.js\"",
-    "start:server": "node server.js",
-    "start:vendors": "node mock-vendors.js",
-    "start": "node server.js"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "payment:smoke": "tsx scripts/payment-smoke.ts",
+    "x402:testnet-smoke": "tsx scripts/payment-smoke.ts",
+    "economics:demo": "tsx scripts/economics-demo.ts",
+    "wallet:opt-in-usdc": "tsx scripts/opt-in-usdc.ts",
+    "job:demo": "tsx scripts/job-demo.ts",
+    "machine:smoke": "tsx scripts/machine-smoke.ts"
   },
   "dependencies": {
-    "@hono/node-server": "^1.12.0",
-    "@x402-avm/avm": "^2.6.1",
-    "@x402-avm/core": "^2.6.1",
-    "@x402-avm/fetch": "^2.6.1",
-    "@x402-avm/hono": "^2.6.1",
-    "dotenv": "^16.4.5",
-    "hono": "^4.5.0",
-    "openai": "^4.0.0"
+    "@x402/avm": "2.23.0",
+    "@x402/core": "2.23.0",
+    "@x402/fetch": "^2.23.0",
+    "@x402/next": "2.23.0",
+    "algosdk": "^3.4.0",
+    "better-sqlite3": "^11.10.0",
+    "next": "16.3.1",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
   },
   "devDependencies": {
-    "concurrently": "^9.0.0"
+    "@eslint/eslintrc": "^3.3.6",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.15.29",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "dotenv": "^16.4.7",
+    "eslint": "^9.28.0",
+    "eslint-config-next": "16.3.1",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.19.2",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.67.0",
+    "vitest": "^3.1.4"
   }
 }

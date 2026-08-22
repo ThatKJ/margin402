@@ -168,3 +168,8 @@ cython_debug/
 # NPM
 node_modules
 
+# Next.js
+.next/
+next-env.d.ts
+tsconfig.tsbuildinfo
+

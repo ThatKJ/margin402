@@ -1,0 +1,305 @@
+@import "tailwindcss";
+
+/*
+ * MARGIN402 DESIGN SYSTEM — "Warm Ledger"
+ *
+ * Premium light. Warm off-white ground, pure white surfaces, near-black ink,
+ * one restrained electric-blue accent, institutional status colors.
+ * Hierarchy: typography > layout > information > motion > 3D.
+ * Every value below is a token — no one-off hex/px values in components.
+ */
+@theme {
+  --font-sans: var(--font-sans-loaded), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-mono-loaded), ui-monospace, "SF Mono", monospace;
+
+  /* ── Surfaces ─────────────────────────────────────────────────────── */
+  --color-base: #faf9f7; /* warm off-white page */
+  --color-panel: #ffffff; /* level 1 — cards, nav */
+  --color-panel-2: #f5f4f1; /* level 2 — subtle fills, hovers */
+  --color-panel-3: #eceae5; /* level 3 — active controls, skeletons */
+  --color-well: #f6f5f2; /* inset wells — code, metadata */
+
+  /* ── Lines ────────────────────────────────────────────────────────── */
+  --color-line: rgba(23, 25, 27, 0.09);
+  --color-line-strong: rgba(23, 25, 27, 0.18);
+
+  /* ── Text ─────────────────────────────────────────────────────────── */
+  --color-ink: #17191b;
+  --color-ink-hover: #33363b;
+  --color-mute: #5c6167;
+  --color-faint: #8a9098;
+
+  /* ── Accent — one restrained electric blue, used sparingly ────────── */
+  --color-accent: #2456d8;
+  --color-accent-deep: #1d46b8;
+  --color-accent-dim: rgba(36, 86, 216, 0.06);
+  --color-accent-line: rgba(36, 86, 216, 0.32);
+
+  /* ── Institutional states — semantic only, never decorative ───────── */
+  --color-pass: #17803d;
+  --color-pass-dim: rgba(23, 128, 61, 0.07);
+  --color-pass-line: rgba(23, 128, 61, 0.32);
+  --color-fail: #b42318;
+  --color-fail-dim: rgba(180, 35, 24, 0.06);
+  --color-fail-line: rgba(180, 35, 24, 0.32);
+  --color-hold: #b45309;
+  --color-hold-dim: rgba(180, 83, 9, 0.08);
+
+  /* ── Radius — engineered, sharp. Never pill-shaped. ───────────────── */
+  --radius-sm: 3px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+
+  /* ── Spacing rhythm — 4px base ────────────────────────────────────── */
+  --spacing-xs: 8px;
+  --spacing-sm: 16px;
+  --spacing-md: 24px;
+  --spacing-lg: 40px;
+  --spacing-xl: 64px;
+  --spacing-section: clamp(80px, 12vw, 150px);
+  --spacing-gutter: 24px;
+  --spacing-margin-mobile: 20px;
+  --spacing-margin-desktop: 48px;
+
+  /* ── Type scale ───────────────────────────────────────────────────── */
+  --text-display: clamp(40px, 6vw, 76px);
+  --text-display--line-height: 1.05;
+  --text-display--letter-spacing: -0.035em;
+  --text-display--font-weight: 600;
+
+  --text-price: clamp(56px, 8.5vw, 104px);
+  --text-price--line-height: 1;
+  --text-price--letter-spacing: -0.04em;
+  --text-price--font-weight: 600;
+
+  --text-headline: clamp(28px, 3.6vw, 42px);
+  --text-headline--line-height: 1.12;
+  --text-headline--letter-spacing: -0.025em;
+  --text-headline--font-weight: 600;
+
+  --text-title: 21px;
+  --text-title--line-height: 28px;
+  --text-title--letter-spacing: -0.015em;
+  --text-title--font-weight: 550;
+
+  --text-body: 16px;
+  --text-body--line-height: 26px;
+  --text-body--letter-spacing: 0em;
+  --text-body--font-weight: 400;
+
+  --text-body-sm: 14px;
+  --text-body-sm--line-height: 22px;
+  --text-body-sm--font-weight: 400;
+
+  --text-stat: clamp(34px, 4vw, 50px);
+  --text-stat--line-height: 1.05;
+  --text-stat--letter-spacing: -0.03em;
+  --text-stat--font-weight: 570;
+
+  --text-data: 14px;
+  --text-data--line-height: 20px;
+  --text-data--letter-spacing: -0.005em;
+  --text-data--font-weight: 500;
+
+  --text-label: 11px;
+  --text-label--line-height: 16px;
+  --text-label--letter-spacing: 0.14em;
+  --text-label--font-weight: 600;
+
+  --text-meta: 12px;
+  --text-meta--line-height: 18px;
+  --text-meta--font-weight: 450;
+}
+
+/* ── Motion language — calm, deliberate, expensive ──────────────────── */
+:root {
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-inout: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast: 130ms;
+  --dur-med: 260ms;
+  --dur-slow: 480ms;
+  --dur-reveal: 720ms;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 88px;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--color-base);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: rgba(36, 86, 216, 0.14);
+  color: var(--color-ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Numbers are the hero — always tabular, always mono where precision matters. */
+.tabular {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: -0.01em;
+}
+
+/* Hairline technical grid — hero texture only, near-invisible. */
+.grid-texture {
+  background-image:
+    linear-gradient(to right, rgba(23, 25, 27, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(23, 25, 27, 0.045) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 90% 82% at 50% 38%, black 25%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse 90% 82% at 50% 38%, black 25%, transparent 75%);
+}
+
+/* Restrained elevation — tonal layering first, shadow only for lift. */
+.shadow-card {
+  box-shadow:
+    0 1px 2px rgba(20, 21, 23, 0.04),
+    0 0 0 1px var(--color-line);
+}
+
+.shadow-lift {
+  box-shadow:
+    0 1px 2px rgba(20, 21, 23, 0.05),
+    0 12px 32px -16px rgba(20, 21, 23, 0.16),
+    0 0 0 1px var(--color-line);
+}
+
+/* ── Keyframes ──────────────────────────────────────────────────────── */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@keyframes flow-dash {
+  to {
+    stroke-dashoffset: -18;
+  }
+}
+
+@keyframes descend {
+  0% {
+    top: 24px;
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.9;
+  }
+  90% {
+    opacity: 0.9;
+  }
+  100% {
+    top: calc(100% - 32px);
+    opacity: 0;
+  }
+}
+
+.x402-descend {
+  animation: descend 5.5s var(--ease-inout) infinite;
+}
+
+.animate-fade-up {
+  animation: fade-up var(--dur-reveal) var(--ease-out) both;
+}
+
+.animate-fade-in {
+  animation: fade-in var(--dur-slow) var(--ease-out) both;
+}
+
+.animate-scale-in {
+  animation: scale-in var(--dur-slow) var(--ease-out) both;
+}
+
+/* Scroll reveal — JS toggles [data-shown]; CSS owns the transition. */
+.reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 700ms var(--ease-out),
+    transform 700ms var(--ease-out);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+
+.reveal[data-shown="true"] {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .reveal {
+    opacity: 1;
+    transform: none;
+  }
+}

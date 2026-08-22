@@ -1,337 +1,301 @@
-### Algorand dApp Quick Start Guide (Base Template)
+# Margin402
 
-This guide helps non‑technical founders and developers quickly prototype and test Web3 ideas on Algorand using this starter. You’ll set up the project, customize the UI via safe AI prompts, mint tokens and NFTs, and interact with smart contracts.
+**Margin402 doesn't guarantee profit. It guarantees the outcome.**
 
-- Repo to fork/clone: `https://github.com/marotipatre/Hackseries-2-QuickStart-template` (source)
-- Works with AlgoKit monorepo structure (contracts + React frontend)
-- Includes prebuilt “cards” demonstrating key patterns:
-  - Counter: simple contract interaction
-  - Bank: complex interaction with contract + Indexer
-  - Asset Create: mint fungible tokens (ASAs)
-  - NFT Mint: upload to IPFS and mint ARC NFTs
-  - Payments: send ALGO and ASA (e.g., USDC)
+Margin402 is fixed-price, outcome-guaranteed AI code execution. A customer — typically an
+autonomous agent or a CI pipeline, not a human clicking buttons — buys a verified outcome at a
+fixed price. Margin402 decides internally how to spend its own execution budget to reach that
+outcome, and absorbs the loss when the real cost of getting there runs over.
 
-[Base template repo](https://github.com/marotipatre/Hackseries-2-QuickStart-template)
+The first (and currently only) workload: *"make this JavaScript function pass these 8 tests."*
+Binary, no partial credit. The verifier is in-house, free, and deliberately not for sale — it's
+the oracle Margin402 is judged against, so it can't also be a paid participant in its own economics.
 
 ---
 
-## 1) Project Setup
+## 1. The Problem
 
-Prerequisites:
-- Docker (running)
-- Node.js 18+ and npm
-- AlgoKit installed (see official docs)
+Autonomous agents increasingly need to buy work, not just call APIs:
 
-Clone or fork the base template:
+- A task may require multiple paid attempts before it succeeds.
+- The agent has a budget, not infinite money.
+- The cheapest provider is not always the cheapest *path to success* — a cheap provider that
+  fails half the time can cost more in expectation than an expensive one that rarely fails.
+- Paying for a failed attempt is a sunk cost with no recourse — the agent bears 100% of the risk
+  of provider failure, on every single call.
+- Nobody is watching. A human can't review every one of a fleet of agents' micro-decisions in
+  real time, so the payment and provider-selection logic has to be trustworthy on its own.
+
+## 2. The Solution
+
+Margin402 is **outcome-underwriting infrastructure for autonomous software work**.
+
+The machine customer gives Margin402 three things: a task, a test suite, and a price (the quote,
+or one counteroffer). Margin402 then owns every decision from there:
+
+- which provider strategy to try first
+- how much to spend, and when to stop trying a strategy that isn't working
+- when to reject a price it can technically afford, because a cheaper path is still available
+- when to escalate to a more expensive, more reliable strategy
+- when continuing to spend is still the right call even though the job is now unprofitable
+- when to give up and refund instead
+
+The customer is not buying model tokens or API calls. **The customer is buying a verified
+outcome at a quoted price** — the economic risk of getting there belongs to Margin402, not to them.
+
+## 3. Why x402
+
+A machine cannot reasonably create an account with every provider it might need, hold a credit
+card, manage a pile of API keys, or manually approve a subscription checkout flow. Machine-to-
+machine commerce needs payment that is as programmable as the request itself:
+
+```text
+Machine
+   ↓
+Margin402 (quote → accept → orchestrate)
+   ↓
+Paid provider (x402: 402 → sign → retry → settle)
+   ↓
+Verified result
+   ↓
+Machine
+```
+
+x402 turns "pay for this" into a normal part of an HTTP request/response cycle: no session, no
+stored card, no human approval step — just a 402 challenge, a signed payment, and a retry. That's
+what lets Margin402 pay per attempt, per strategy, per round, entirely under its own economic
+logic, with no human in the loop. If x402 were removed, this product would have nothing left to
+automate the payment side with — it would be back to manual invoicing, which defeats the point.
+
+## 4. Why Algorand
+
+- **Testnet** implementation throughout — every payment in this repository settles on Algorand
+  Testnet, verifiable independently on [Lora](https://lora.algokit.io/testnet).
+- **USDC ASA `10458941`** (testnet) — a stable unit of account for micropayments as small as $0.05.
+- Fast finality and low, predictable fees make per-request settlement viable at the price points
+  this product actually charges (as low as $0.05 per provider call).
+- The architecture is network-agnostic beyond a handful of constants (see §14) — moving to
+  mainnet is a configuration change, not a rewrite. This repository deliberately stays on
+  testnet; see §11 for why.
+
+## 5. Real x402 Flow
+
+```text
+Request
+   ↓
+402 Payment Required
+   ↓
+Client signs payment (treasury wallet, @x402/avm)
+   ↓
+Retry with X-PAYMENT
+   ↓
+GoPlausible facilitator — verify
+   ↓
+GoPlausible facilitator — settle
+   ↓
+Algorand Testnet transaction
+   ↓
+Paid service responds
+   ↓
+Transaction-linked receipt
+```
+
+Every step above is real, running code — not a mock:
+
+| Step | Code |
+|---|---|
+| 402 challenge | [`src/lib/providers/create-provider-route.ts`](src/lib/providers/create-provider-route.ts) via `@x402/next`'s `withX402` |
+| Client signs + retries | [`src/lib/x402/buyer.ts`](src/lib/x402/buyer.ts) via `@x402/fetch`'s `wrapFetchWithPayment` |
+| Facilitator verify/settle | [`src/lib/x402/server.ts`](src/lib/x402/server.ts) — `HTTPFacilitatorClient` against GoPlausible |
+| Network identity | [`src/lib/x402/network.ts`](src/lib/x402/network.ts) — full CAIP-2 genesis-hash form, matched exactly against the facilitator's own `/supported` response |
+| Receipt | Real `txId` decoded from the `PAYMENT-RESPONSE` header, carried on every `payment` SSE event and aggregated onto the final `closed` event's `settlements[]` |
+
+**This flow has been run for real** against Algorand Testnet — see §16 for a verified transaction.
+
+## 6. Architecture
+
+See [`docs/diagrams.md`](docs/diagrams.md) for the five core diagrams (system architecture,
+payment flow, outcome-underwriting loop, economic decision, canonical demo timeline).
+
+One Next.js (App Router, TypeScript) application. No other services.
+
+- **UI + orchestrator + provider routes**, all in the same app — `/quote`, `/execution`,
+  `/statement` on the customer side; `/api/providers/{draft,repair,premium}` as the x402-gated
+  "simulated provider market" Margin402 buys from.
+- **Economics engine** (`src/lib/economics/`) — pure functions, no I/O: strategy selection by
+  expected cost-to-success, a separate affordability check, and the honouring rule. Nothing here
+  touches payments or the network.
+- **Orchestrator** (`src/lib/orchestrator/run-job.ts`) — the state machine that sequences
+  decide → pay → verify → record → repeat, streaming every step as a Server-Sent Event.
+- **Sandbox** (`src/lib/sandbox/`) — `node:vm` inside a `worker_thread`, no Docker: a 2-second
+  total budget, 500ms per test, 64MB memory cap, and a hard-kill backstop. Verification never
+  fakes pass/fail, in demo mode or otherwise.
+- **x402 payment layer** (`src/lib/x402/`) — real buyer and resource-server wiring against
+  Algorand Testnet via the GoPlausible facilitator.
+- **Machine API** (`/api/quote`, `/api/jobs/execute`) — the same product, over plain HTTP, with
+  zero UI dependency.
+- **State** — no database. Job state lives in a React context on the client for the length of one
+  browser session; on the server, an in-memory idempotency guard (`active`/`settled` sets) is all
+  that's needed to prevent a duplicate real payment.
+
+## 7. Canonical Demo
+
+```text
+Quote:          $1.20
+Counteroffer:   $1.05 → accepted
+
+Draft      $0.05   5/8 tests
+Repair     $0.09   7/8 tests
+Premium    $0.85   AFFORDABLE — REJECTED (economically inferior to an available alternative)
+Repair     $0.09   7/8 tests
+Premium    $1.05   8/8 tests — accepted under the honouring rule
+
+Total execution:  $1.28
+Revenue:           $1.05
+Margin:           -$0.23
+Outcome:           VERIFIED
+```
+
+The negative margin is **intentional, not a bug** — it's the entire thesis made concrete.
+Margin402 had already accepted the job at $1.05; when the only path left to a verified outcome
+cost more than what remained of the budget, it paid anyway rather than refund, because delivering
+at a loss cost less than refunding after sunk spend. The customer got exactly what they were
+quoted. Margin402 absorbed the difference.
+
+Reproduce this exact scenario yourself, over plain HTTP, with `npm run machine:smoke`.
+
+## 8. Hidden Tests
+
+The workload ships 8 tests: 6 visible, 2 hidden. Providers (whether a canned demo candidate or a
+live model call) only ever see the visible 6 — the hidden pair exists purely to catch code that
+special-cases what it can see rather than solving the actual problem.
+
+Every attempt is verified against **all 8**, visible and hidden alike, by the same sandboxed
+`verify()` call — there's no separate, looser check for what the provider was shown.
+`run-job.ts`'s `visibleFailuresOnly()` guarantees a hidden test's name or failure reason never
+reaches `previousFailures`, which is what gets fed back into the next provider call (and, in live
+mode, into an actual LLM prompt) — regression-tested in
+[`run-job.test.ts`](src/lib/orchestrator/__tests__/run-job.test.ts).
+
+## 9. Economic Decision
+
+Two separate questions, deliberately never merged into one:
+
+- **Affordability** — *can we technically pay this, given what's left of the budget?*
+- **Economic rationality** — *is paying this the cheapest expected path to a verified outcome,
+  given the alternatives still available?*
+
+`selectStrategy()` answers the second question first, using only expected cost-to-success —
+affordability plays no part in choosing a winner. Only afterward is the winner checked against
+the remaining budget. That ordering is what makes it possible for Margin402 to say:
+
+> "We can afford $0.85. We're rejecting it anyway, because $0.09 is a better expected bet
+> right now."
+
+Every such rejection carries a fixed, literal reason string
+(`Payment rejected: economically inferior to available alternative.`) — never a budget
+explanation — so a rejection is provably economic, not a disguised "insufficient funds."
+
+## 10. Important Limitation
+
+**Be honest about this: the three provider strategies (Draft, Repair, Premium) are endpoints
+Margin402 itself owns**, not independent third-party providers. The price curve driving them is
+scripted and deterministic, labelled "simulated provider market" everywhere it appears in the UI.
+
+What *is* real regardless: the x402 payment rail and the Algorand settlement. Every provider call
+still goes through a genuine 402 → sign → retry → facilitator-verify → facilitator-settle round
+trip, and a genuine transaction lands on Algorand Testnet — the protocol integration being
+demonstrated doesn't change based on who happens to be on the receiving end.
+
+The statement screen also separates three numbers that must never be conflated:
+
+- **Revenue** — what the customer actually paid.
+- **Execution cost** — the real sum of every payment Margin402 made this job.
+- **Ext. inference cost** — shown honestly as **"Not tracked"** rather than a fabricated number,
+  since this build has no separate external-inference metering to report.
+
+## 11. Test Commands
+
+Every command below exists in `package.json` and does what it says — nothing here is aspirational.
 
 ```bash
-git clone https://github.com/marotipatre/Hackseries-2-QuickStart-template.git
-cd Hackseries-2-QuickStart-template
+npm install                # install dependencies
+npm run dev                 # start the dev server (real x402 payments by default)
+npm test                    # run the full test suite (44+ tests, no network/payment involved)
+npx tsc --noEmit             # typecheck
+npm run lint                 # eslint
+npm run build                 # production build
+
+npm run economics:demo       # print the economics engine's decisions for the canonical scenario
+npm run machine:smoke        # prove the machine-customer API (quote → counteroffer → execute) over plain HTTP
+npm run job:demo             # run one full job against a running dev server (real x402 payments unless PROVIDER_CLIENT_MODE=inprocess)
+npm run payment:smoke        # alias of x402:testnet-smoke
+npm run x402:testnet-smoke   # ONE real x402 payment against Algorand Testnet — needs a funded TREASURY_MNEMONIC
+npm run wallet:opt-in-usdc   # one-time: opt the treasury wallet into testnet USDC (asset 10458941)
 ```
 
-Bootstrap the workspace (installs deps, sets up venv, etc.):
+`payment:smoke` / `x402:testnet-smoke` and `job:demo` spend real (zero-value, testnet-only) USDC.
+Everything else is free to run repeatedly.
 
-```bash
-algokit project bootstrap all
+## 12. Environment Variables
+
+See [`.env.example`](.env.example) for the authoritative, commented list. Summary:
+
+| Variable | Purpose |
+|---|---|
+| `TREASURY_MNEMONIC` | 25-word mnemonic for the custodial server-side Algorand Testnet wallet. Never commit a real value. |
+| `FACILITATOR_URL` | GoPlausible facilitator endpoint (defaults to the public one) |
+| `ALGOD_URL` | Public Algorand Testnet node (defaults to Algonode, no key required) |
+| `ECHO_PRICE_USD` | Price of the `/api/providers/echo` smoke-test route |
+| `SPEND_CAP_PER_JOB_USD` / `SPEND_CAP_PER_HOUR_USD` | Hard spend guard — every payment call is checked against both before it runs |
+| `DEMO_MODE` | `true` (default): candidate code is a pre-verified canned response, never a live model call. Payments, the sandbox, and the economics engine are real either way. |
+| `OPENAI_API_KEY` | Only needed when `DEMO_MODE=false` |
+| `PROVIDER_CLIENT_MODE` | Unset (default): real x402 payments. `inprocess`: local-only, zero-payment escape hatch for safely exercising the orchestrator/UI |
+| `JOB_DEMO_REVENUE` | Revenue `npm run job:demo` uses (defaults to the canonical $1.05) |
+
+Never put real secrets in this file or in the README — `.env` is gitignored.
+
+## 13. Deployment
+
+1. Provision a Next.js host (Vercel or equivalent).
+2. Set every variable from §12 in the host's environment config — at minimum
+   `TREASURY_MNEMONIC` (a funded Algorand Testnet wallet, opted into USDC ASA `10458941`),
+   `FACILITATOR_URL`, and `ALGOD_URL`.
+3. Leave `PROVIDER_CLIENT_MODE` unset in production — that's what makes payments real.
+4. `npm run build && npm run start`.
+5. No database, no queue, no cache to provision — this app is deliberately a single deployable
+   unit.
+
+Moving from testnet to mainnet later is a configuration change (network constant, ASA id,
+facilitator URL, a mainnet-funded wallet), not an architecture change — see
+[`src/lib/x402/network.ts`](src/lib/x402/network.ts).
+
+## 14. Judge Quickstart
+
+If you only have two minutes:
+
+1. `npm install && npm run dev`, open `/quote`.
+2. Accept the quote, or submit one counteroffer (try $1.05).
+3. Watch `/execution` stream live — the moment that matters is **Premium requested at $0.85,
+   rejected on screen** even though it's affordable.
+4. Watch `/statement` land on **Margin −$0.23, Outcome VERIFIED**.
+5. Check the footer in small grey type for the real Algorand Testnet settlement proof.
+6. Run `npm run machine:smoke` in a second terminal to see the identical scenario happen with
+   zero browser involved.
+
+## 15. Real Settlement Proof
+
+A real x402 payment has been run against this exact codebase and independently verified
+on-chain (not from application logs) via the Algorand Testnet indexer:
+
+```text
+Transaction ID: LAZJKDUVNLOJFDLN7XNHWCFDFIBZGCFRGYGA6DUDZP5WFQ3G6SDA
+Network:        Algorand Testnet
+Asset:          USDC (ASA 10458941)
+Amount:         $0.01
+Facilitator:    GoPlausible
+Confirmed round: 66553456
+Lora:           https://lora.algokit.io/testnet/transaction/LAZJKDUVNLOJFDLN7XNHWCFDFIBZGCFRGYGA6DUDZP5WFQ3G6SDA
 ```
 
-Build all projects:
-
-```bash
-algokit project run build
-```
-
-Run the frontend:
-
-```bash
-cd projects/frontend
-npm install
-npm run dev
-```
-
-Optional: alternative starter to compare or borrow patterns from:
-
-```bash
-git clone https://github.com/Ganainmtech/Algorand-dApp-Quick-Start-Template-TypeScript.git
-```
-
-References:
-- Algorand Developer Portal: `https://dev.algorand.co/`
-- AlgoKit Workshops: `https://algorand.co/algokit-workshops`
-- Algodevs YouTube: `https://www.youtube.com/@algodevs`
-
----
-
-## 2) Required environment variables (Frontend)
-
-Create `projects/frontend/.env` with the following values for TestNet (adjust as needed):
-
-```bash
-# Network (Algod)
-VITE_ALGOD_SERVER=https://testnet-api.algonode.cloud
-VITE_ALGOD_PORT=
-VITE_ALGOD_TOKEN=
-VITE_ALGOD_NETWORK=testnet
-
-# Indexer (for Bank/indexed reads)
-VITE_INDEXER_SERVER=https://testnet-idx.algonode.cloud
-VITE_INDEXER_PORT=
-VITE_INDEXER_TOKEN=
-
-# Optional: KMD (if using a local KMD wallet)
-VITE_KMD_SERVER=http://localhost
-VITE_KMD_PORT=4002
-VITE_KMD_TOKEN=a-super-secret-token
-VITE_KMD_WALLET=unencrypted-default-wallet
-VITE_KMD_PASSWORD=some-password
-
-# Pinata (NFT media + metadata to IPFS)
-# Generate a JWT in Pinata and paste below
-VITE_PINATA_JWT=eyJhbGciOi...  # JWT from Pinata
-# Optional: custom gateway
-VITE_PINATA_GATEWAY=https://gateway.pinata.cloud/ipfs
-```
-
-Notes:
-- Algod/Indexer config is read by `src/utils/network/getAlgoClientConfigs.ts`:
-  - `VITE_ALGOD_SERVER`, `VITE_ALGOD_PORT`, `VITE_ALGOD_TOKEN`, `VITE_ALGOD_NETWORK`
-  - `VITE_INDEXER_SERVER`, `VITE_INDEXER_PORT`, `VITE_INDEXER_TOKEN`
-- Pinata integration expects `VITE_PINATA_JWT` and optional `VITE_PINATA_GATEWAY` for NFT uploads (see `src/utils/pinata.ts`).
-- Restart the dev server after editing `.env`.
-
-Pinata API keys/JWT: create via Pinata dashboard `https://app.pinata.cloud/developers/api-keys` and use the generated JWT.
-
----
-
-## 3) Project map (what to tweak)
-
-Frontend location: `projects/frontend`
-
-Key files:
-- `src/Home.tsx` — Landing page
-- `src/components/Transact.tsx` — Payments (ALGO, template for ASA)
-- `src/components/Bank.tsx` — Contract + Indexer demo (deploy, deposit, withdraw, statements, depositors)
-- `src/components/CreateASA.tsx` — Create fungible tokens (ASA)
-- `src/components/MintNFT.tsx` — Mint NFTs with IPFS media/metadata
-- `src/components/AppCalls.tsx` — Example app call wiring to a contract
-- `src/utils/pinata.ts` — Pinata IPFS utilities (file/JSON pin)
-- `src/utils/network/getAlgoClientConfigs.ts` — Network configs from Vite env
-
-Contracts (generated artifacts, clients):
-- `projects/contracts/smart_contracts/**` and `projects/frontend/src/contracts/**`
-
----
-
-## 4) Use AI to redesign UI safely (keep logic intact)
-
-How to work:
-1) Open the target file and copy its full contents.
-2) Paste into your AI tool (ChatGPT/Claude/Gemini).
-3) Use the corresponding prompt below to redesign using TailwindCSS.
-4) Replace only JSX/markup/styles. Do NOT change logic, imports, props, state, handlers, or function calls.
-
-### 4.1 Home (Landing Page)
-
-File: `projects/frontend/src/Home.tsx`
-
-Prompt:
-```
-I'm building an Algorand dApp and want to improve the design of my landing page in projects/frontend/src/Home.tsx. Please redesign the layout using modern web design principles with TailwindCSS. Include:
-- A visually striking hero section with a short headline and subheading
-- A primary call-to-action button that navigates to key features
-- A simple feature grid that highlights the cards: Counter, Bank, Payments, Create Token (ASA), Mint NFT
-- Balanced spacing, responsive design (mobile/desktop), and a Web3/tech-style color theme
-Keep ALL existing logic for wallet connection, navigation, event handlers, and button states EXACTLY as they are — do not change any logic or data flow. Only change the JSX structure and Tailwind classes.
-```
-
-### 4.2 Payments (Transact)
-
-File: `projects/frontend/src/components/Transact.tsx`
-
-Prompt:
-```
-I'm building a payments dApp on Algorand that allows users to send ALGO or USDC to others. I’ve pasted the existing projects/frontend/src/components/Transact.tsx which already contains transaction logic. Please redesign this component using TailwindCSS to look like a clean, modern payment interface:
-- Clear inputs for recipient address and read-only display for amount (1 ALGO in this example)
-- A prominent Send button
-- Helpful labels, subtle validation states, and a simple success message area
-- Responsive, minimal Web3 design aesthetic
-Keep ALL wallet and transaction logic EXACTLY as it is — do not change any function names, props, state variables, or event handlers.
-```
-
-Optional extension prompt (ASA like USDC):
-```
-Extend the UI design to optionally switch between sending ALGO or an ASA (e.g., USDC) without changing existing ALGO logic. Only provide additional JSX blocks and Tailwind classes; do not modify or remove the current payment logic. You can add a new tab-like UI and mock disabled form fields for ASA to show the final look-and-feel.
-```
-
-### 4.3 Bank (Complex contract + Indexer)
-
-File: `projects/frontend/src/components/Bank.tsx`
-
-Prompt:
-```
-This is a "Bank" demo that shows a more complex Algorand contract integration with Indexer queries, boxes, and inner transactions. I’ve pasted projects/frontend/src/components/Bank.tsx. Please enhance the UI with TailwindCSS:
-- Clear App ID input and App Address display
-- Two panels: Deposit (memo + amount) and Withdraw (amount)
-- A status area for loading/spinners and action feedback
-- Paginated, scrollable Statements and Depositors lists, with clear labels and link to explorer
-- Keep it responsive and professional with a dashboard feel
-Do NOT change any logic, props, function names, or data fetching. Only adjust JSX structure and Tailwind classes.
-```
-
-### 4.4 Create ASA (Fungible tokens)
-
-File: `projects/frontend/src/components/CreateASA.tsx`
-
-Prompt:
-```
-I'm building a loyalty/stablecoin-like token on Algorand. I’ve included projects/frontend/src/components/CreateASA.tsx with working ASA creation logic. Please redesign the component using TailwindCSS to present a professional token creation form:
-- Inputs: Token Name, Unit/Symbol, Decimals, Total Supply (base units)
-- A clear, primary "Create Token" button with loading/disabled states
-- A compact help text about each field
-- Minimal dashboard style consistent with the rest of the app
-Keep ALL minting and wallet logic EXACTLY as-is — change ONLY layout and Tailwind classes.
-```
-
-### 4.5 Mint NFT (IPFS + ARC NFT)
-
-File: `projects/frontend/src/components/MintNFT.tsx`
-
-Prompt:
-```
-I'm building an Algorand-based NFT dApp that allows users to mint digital collectibles. I’ve pasted projects/frontend/src/components/MintNFT.tsx which already includes upload to IPFS and NFT mint logic. Please redesign using TailwindCSS:
-- Upload field for image/file with preview
-- Inputs for Name and Description
-- Display upload and mint progress (spinners, progress bars, small status messages)
-- A primary "Mint NFT" button with clear disabled/loading states
-- A link to view the NFT/metadata via the configured IPFS gateway
-Keep ALL wallet, IPFS (Pinata), and minting logic EXACTLY as-is — modify only JSX and Tailwind classes.
-```
-
----
-
-## 5) NFT Environment (Pinata + IPFS)
-
-- Create Pinata API Key/JWT: `https://app.pinata.cloud/developers/api-keys`
-- Put JWT in `projects/frontend/.env` as `VITE_PINATA_JWT`
-- Optional: set `VITE_PINATA_GATEWAY` to your preferred gateway
-- Restart dev server after changing `.env`:
-
-```bash
-npm run dev
-```
-
-NFT flow uses:
-- `src/utils/pinata.ts` (expects `VITE_PINATA_JWT`, optional `VITE_PINATA_GATEWAY`)
-- `pinFileToIPFS` and `pinJSONToIPFS` endpoints
-
----
-
-## 6) Smart Contract interaction basics
-
-- Example TS clients are generated into `projects/frontend/src/contracts`
-- Frontend demo wiring in `src/components/AppCalls.tsx`
-- Use Bank/Counter cards to explore app call patterns, boxes, and Indexer usage
-
-Learn more:
-- Algorand Dev Portal: `https://dev.algorand.co/`
-- AlgoKit Workshops: `https://algorand.co/algokit-workshops`
-- Algodevs YouTube: `https://www.youtube.com/@algodevs`
-
----
-
-## 7) Card overview and tweak ideas
-
-- Counter
-  - Purpose: Simple app call demonstration
-  - Tweak: Typography, spacing, and success toast placement
-  - AI tip: “Add a hero-like header; keep all state/handlers/contract calls unchanged.”
-
-- Bank
-  - Purpose: Complex contract with deposit/withdraw and Indexer reads
-  - Tweak: Two-column layout, data tables with pagination, explorer links
-  - AI tip: “Make statements/depositors scrollable; maintain all function names and handlers.”
-
-- Payments (Transact)
-  - Purpose: Send ALGO (and optionally mock ASA UI)
-  - Tweak: Input clarity, action emphasis, subtle validation messaging
-  - AI tip: “Keep existing ALGO logic identical; ASA tab as UI-only demo.”
-
-- Create ASA
-  - Purpose: Mint fungible token
-  - Tweak: Professional form design, helper text for decimals/total
-  - AI tip: “Do not change the `algorand.send.assetCreate` call; style form and loading states.”
-
-- Mint NFT
-  - Purpose: Upload media/metadata to IPFS, mint an ARC NFT
-  - Tweak: File upload preview, progress messages, gateway links
-  - AI tip: “Keep Pinata calls and NFT mint logic intact; enhance UI and progress indicators.”
-
----
-
-## 8) Troubleshooting
-
-- “Missing VITE_ALGOD_SERVER”
-  - Ensure `.env` exists in `projects/frontend` and values are set
-  - Restart `npm run dev`
-
-- “Missing VITE_PINATA_JWT” or IPFS upload fails
-  - Generate JWT in Pinata dashboard and add to `.env`
-  - Confirm gateway works or remove custom gateway (defaults to `https://ipfs.io/ipfs`)
-
-- Indexer queries return empty
-  - Verify `VITE_INDEXER_SERVER` is a TestNet Indexer and `VITE_ALGOD_NETWORK=testnet`
-  - Confirm correct App ID in Bank card
-
-- Transactions fail
-  - Ensure wallet is connected and funded
-  - For Bank, input a valid App ID or deploy via the card
-
----
-
-## 9) CI/CD (Optional)
-
-- Integrate with GitHub Actions for lint/type/test and deployments.
-- Deploy smart contracts via `algokit deploy`.
-- Deploy frontend to Vercel/Netlify; add these `.env` variables to hosting settings.
-
----
-
-## 10) Copy‑ready AI Prompt Snippets
-
-Use these verbatim as you work card‑by‑card:
-
-- Home:
-```
-Redesign projects/frontend/src/Home.tsx using TailwindCSS for a modern Web3 landing page with a strong hero, concise subtitle, and a grid of feature cards (Counter, Bank, Payments, Create Token, Mint NFT). Keep all wallet/navigation logic, props, and handlers EXACTLY as-is. Modify only JSX and Tailwind classes.
-```
-
-- Transact:
-```
-Redesign projects/frontend/src/components/Transact.tsx into a clean payments UI (recipient input, 1 ALGO send button, success message area). Keep ALL existing logic and handlers unchanged. Modify only JSX/Tailwind. Optionally add an ASA tab UI mock without changing logic.
-```
-
-- Bank:
-```
-Enhance projects/frontend/src/components/Bank.tsx with a dashboard feel: App ID input, deploy section, deposit/withdraw cards, scrollable statements and depositors lists with explorer links. Maintain ALL logic and calls as-is; only update layout and Tailwind classes.
-```
-
-- Create ASA:
-```
-Redesign projects/frontend/src/components/CreateASA.tsx to a professional token creation form with inputs (Name, Unit, Decimals, Total), helper text, and a prominent Create button with loading state. Keep all ASA creation logic intact; change only JSX/Tailwind.
-```
-
-- Mint NFT:
-```
-Redesign projects/frontend/src/components/MintNFT.tsx for a sleek NFT minter: file upload with preview, name/description fields, visible Mint button, and progress indicators. Keep Pinata, IPFS, and mint logic untouched; only adjust JSX/Tailwind.
-```
-
----
-
-Links cited:
-- Base template repo: [marotipatre/Hackseries-2-QuickStart-template](https://github.com/marotipatre/Hackseries-2-QuickStart-template)
-- Algorand Developer Portal: `https://dev.algorand.co/`
-- AlgoKit Workshops: `https://algorand.co/algokit-workshops`
-- Algodevs YouTube: `https://www.youtube.com/@algodevs`
-- Pinata API Keys: `https://app.pinata.cloud/developers/api-keys`
-
-
+Run `npm run x402:testnet-smoke` yourself against a funded wallet to reproduce this.

@@ -11,13 +11,20 @@ import { SIMULATED_MARKET_LABEL } from "@/lib/providers/price-curve";
 import type { JobEvent, JobOutcome } from "@/lib/orchestrator/types";
 import type { StepDecision } from "@/lib/economics/types";
 
+const PLAN_NAMES: Record<string, string> = {
+  "lowest-cost": "Lowest Cost",
+  "best-value": "Best Value",
+  "highest-confidence": "Highest Confidence",
+};
+
 export function ExecutionScreen() {
   const router = useRouter();
-  const { revenue, jobId, events, pushEvent, outcome } = useJob();
+  const { revenue, jobId, events, pushEvent, outcome, planId } = useJob();
   const hasEvents = events.length > 0;
   const scrollAnchorRef = useRef<HTMLDivElement | null>(null);
   const reducedMotion = usePrefersReducedMotion();
   const [streamOpen, setStreamOpen] = useState(false);
+  const activePlanId = planId ?? "best-value";
 
   useEffect(() => {
     if (revenue === null) router.replace("/quote");
@@ -26,7 +33,7 @@ export function ExecutionScreen() {
   useEffect(() => {
     if (revenue === null || jobId === null || hasEvents) return;
 
-    const source = new EventSource(`/api/jobs/execute?revenue=${revenue}&jobId=${jobId}`);
+    const source = new EventSource(`/api/jobs/execute?revenue=${revenue}&jobId=${jobId}&planId=${activePlanId}`);
     source.onopen = () => setStreamOpen(true);
     source.onmessage = (message) => {
       const event: JobEvent = JSON.parse(message.data);
@@ -80,7 +87,8 @@ export function ExecutionScreen() {
           <div className="flex items-center gap-xs text-label uppercase text-mute">
             <span className={`h-1.5 w-1.5 rounded-full ${streamOpen ? "bg-pass animate-pulse" : "bg-faint"}`} aria-hidden="true" />
             Execution
-            {streamOpen && running && <span className="h-1 w-1 rounded-full bg-pass animate-pulse" aria-hidden="true" />}
+            <span className="h-3 w-px bg-line-strong" aria-hidden="true" />
+            <span className="text-accent">Plan · {PLAN_NAMES[activePlanId]}</span>
           </div>
           <h1 className="text-headline leading-tight text-ink">
             {running ? "Working toward a verified outcome" : displayOutcome === "VERIFIED" ? "Outcome verified" : "Execution closed"}
@@ -434,7 +442,7 @@ function PendingIndicator() {
           <span key={delay} className="h-1.5 w-1.5 animate-bounce rounded-full bg-mute" style={{ animationDelay: `${delay}ms` }} />
         ))}
       </span>
-      working
+      Evaluating the next available execution path…
     </div>
   );
 }

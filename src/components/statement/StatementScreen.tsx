@@ -16,8 +16,11 @@ const STAGE_ORDER: RevealStage[] = ["revenue", "cost", "margin", "verdict", "don
 
 export function StatementScreen() {
   const router = useRouter();
-  const { revenue, events, outcome, startedAt, endedAt, reset } = useJob();
+  const { revenue, events, outcome, startedAt, endedAt, reset, planId } = useJob();
   const reducedMotion = usePrefersReducedMotion();
+  const activePlanId = planId ?? "best-value";
+  const planName =
+    activePlanId === "lowest-cost" ? "Lowest Cost" : activePlanId === "highest-confidence" ? "Highest Confidence" : "Best Value";
 
   useEffect(() => {
     if (outcome === null) router.replace("/quote");
@@ -107,6 +110,7 @@ export function StatementScreen() {
             </Badge>
           </div>
           <div className="mt-2 flex flex-col gap-1 font-mono text-data text-faint">
+            <MetaRow label="Plan" value={planName} />
             <MetaRow label="Duration" value={durationMs !== null ? `${durationMs}ms` : "—"} />
             <MetaRow label="Constraints" value={finalVerification ? `${finalVerification.passed}/${finalVerification.total} pass` : `${view.rows.filter((r) => r.kind === "paid").at(-1)?.passed ?? 0}/8`} />
             <MetaRow label="Timestamp" value={endedAt ? new Date(endedAt).toISOString() : "—"} />

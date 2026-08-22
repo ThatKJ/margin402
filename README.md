@@ -275,7 +275,8 @@ facilitator URL, a mainnet-funded wallet), not an architecture change — see
 If you only have two minutes:
 
 1. `npm install && npm run dev`, open `/quote`.
-2. Accept the quote, or submit one counteroffer (try $1.05).
+2. Pick a plan — Lowest Cost, Best Value (recommended), or Highest Confidence — then accept,
+   or submit one counteroffer (try $1.05 on Best Value).
 3. Watch `/execution` stream live — the moment that matters is **Premium requested at $0.85,
    rejected on screen** even though it's affordable.
 4. Watch `/statement` land on **Margin −$0.23, Outcome VERIFIED**.
@@ -289,13 +290,15 @@ A real x402 payment has been run against this exact codebase and independently v
 on-chain (not from application logs) via the Algorand Testnet indexer:
 
 ```text
-Transaction ID: LAZJKDUVNLOJFDLN7XNHWCFDFIBZGCFRGYGA6DUDZP5WFQ3G6SDA
+Transaction ID: XCAIMTNX36Z4CV4BY4R35UA6LKE3QEX5CRY6ISJWITVPDHBIGYFQ
 Network:        Algorand Testnet
 Asset:          USDC (ASA 10458941)
-Amount:         $0.01
+Amount:         $0.01 (10000 base units, axfer)
 Facilitator:    GoPlausible
-Confirmed round: 66553456
-Lora:           https://lora.algokit.io/testnet/transaction/LAZJKDUVNLOJFDLN7XNHWCFDFIBZGCFRGYGA6DUDZP5WFQ3G6SDA
+Fee:            0 (sponsored by the facilitator)
+Confirmed round: 66569692
+Lora:           https://lora.algokit.io/testnet/transaction/XCAIMTNX36Z4CV4BY4R35UA6LKE3QEX5CRY6ISJWITVPDHBIGYFQ
 ```
 
-Run `npm run x402:testnet-smoke` yourself against a funded wallet to reproduce this.
+Reproduce with `npm run x402:testnet-smoke` against a funded testnet wallet, or verify the
+transaction above directly on Lora / any Algorand Testnet indexer.

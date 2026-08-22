@@ -173,3 +173,7 @@ node_modules
 next-env.d.ts
 tsconfig.tsbuildinfo
 
+
+# Local design export + agent tooling — not part of the shipped app
+/margin402_design
+/.claude/

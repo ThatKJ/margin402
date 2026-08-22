@@ -43,6 +43,11 @@ export async function GET(request: NextRequest) {
     return new Response("invalid revenue", { status: 400 });
   }
 
+  const planId = request.nextUrl.searchParams.get("planId") as "lowest-cost" | "best-value" | "highest-confidence" | null;
+  if (planId && !["lowest-cost", "best-value", "highest-confidence"].includes(planId)) {
+    return new Response("invalid planId", { status: 400 });
+  }
+
   const jobId = request.nextUrl.searchParams.get("jobId") ?? randomUUID();
   if (settled.has(jobId)) {
     return new Response("job already made real payments — this is a retry, not a new job", { status: 409 });
@@ -84,7 +89,7 @@ export async function GET(request: NextRequest) {
         }
       };
       try {
-        const result = await runJob({ revenue, providerClient, onEvent: send, signal: abortController.signal });
+        const result = await runJob({ revenue, planId: planId ?? undefined, providerClient, onEvent: send, signal: abortController.signal });
         if (result.ledger.attempts.length > 0) settled.add(jobId);
       } catch (err) {
         // A real attempt was already made if any payment event fired before

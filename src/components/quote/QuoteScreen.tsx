@@ -10,18 +10,22 @@ import { useJob } from "@/lib/state/job-context";
 import { Badge } from "@/components/primitives/Badge";
 import { Button } from "@/components/primitives/Button";
 import { Spinner } from "@/components/primitives/Indicators";
-import type { QuoteBreakdown } from "@/lib/economics/types";
+import { PlanCard } from "./PlanCard";
+import type { CustomerPlan } from "@/lib/economics/plans";
+import type { PlanId } from "@/lib/orchestrator/types";
 import type { CustomerOfferResult } from "@/lib/actions/quote-actions";
 
 const QUOTE_VALIDITY_SECONDS = 60;
 
-type Phase = "quoted" | "counter-open" | "counter-result" | "confirming" | "expired";
+type Phase = "plans" | "counter-open" | "counter-result" | "confirming" | "expired";
 
-export function QuoteScreen({ quote }: { quote: QuoteBreakdown }) {
+export function QuoteScreen({ quotePrice, plans }: { quotePrice: number; plans: CustomerPlan[] }) {
   const router = useRouter();
   const { acceptQuote, reset } = useJob();
 
-  const [phase, setPhase] = useState<Phase>("quoted");
+  const [phase, setPhase] = useState<Phase>("plans");
+  const [selectedId, setSelectedId] = useState<PlanId | null>(null);
+  const [expandedId, setExpandedId] = useState<PlanId | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(QUOTE_VALIDITY_SECONDS);
   const [counterInput, setCounterInput] = useState("");
   const [result, setResult] = useState<CustomerOfferResult | null>(null);
@@ -35,7 +39,7 @@ export function QuoteScreen({ quote }: { quote: QuoteBreakdown }) {
   }, [reset]);
 
   useEffect(() => {
-    if (phase !== "quoted" && phase !== "counter-open") return;
+    if (phase !== "plans" && phase !== "counter-open") return;
     if (secondsLeft <= 0) {
       setPhase("expired");
       return;
@@ -48,19 +52,27 @@ export function QuoteScreen({ quote }: { quote: QuoteBreakdown }) {
     if (phase === "counter-open") counterInputRef.current?.focus();
   }, [phase]);
 
+  const selected = plans.find((p) => p.id === selectedId) ?? null;
+  const recommended = plans.find((p) => p.recommended) ?? null;
+
+  function choosePlan(plan: CustomerPlan) {
+    setSelectedId(plan.id);
+    document.getElementById("plan-confirm")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
   function handleAccept(amount: number) {
-    if (startedRef.current) return;
+    if (startedRef.current || !selected) return;
     startedRef.current = true;
     setPhase("confirming");
     void (async () => {
       await wait(900);
-      acceptQuote(amount);
+      acceptQuote(amount, selected.id);
       router.push("/execution");
     })();
   }
 
   function handleSubmitCounter() {
-    if (counterSpent || isPending) return;
+    if (counterSpent || isPending || !selected) return;
     const value = Number(counterInput);
     setCounterSpent(true);
     startTransition(async () => {
@@ -72,22 +84,24 @@ export function QuoteScreen({ quote }: { quote: QuoteBreakdown }) {
 
   function restartValidity() {
     setSecondsLeft(QUOTE_VALIDITY_SECONDS);
-    setPhase(result?.decision === "ACCEPT" ? "counter-result" : "quoted");
+    setResult(null);
+    setCounterInput("");
+    setPhase("plans");
   }
 
   const acceptedOffer = result?.decision === "ACCEPT" ? result.offer : null;
-  const displayPrice = useCountUp(acceptedOffer ?? quote.quote, acceptedOffer !== null ? 800 : 0);
+  const displayPrice = useCountUp(acceptedOffer ?? selected?.price ?? quotePrice, acceptedOffer !== null ? 800 : 0);
   const urgent = secondsLeft <= 10;
   const validityPct = Math.max(0, Math.min(100, (secondsLeft / QUOTE_VALIDITY_SECONDS) * 100));
 
   return (
-    <section className="mx-auto w-full max-w-[880px] px-margin-mobile pt-28 pb-section md:px-margin-desktop md:pt-32">
+    <section className="mx-auto w-full max-w-[1200px] px-margin-mobile pt-28 pb-section md:px-margin-desktop md:pt-32">
       <div className="mb-md flex items-center justify-between">
         <p className="flex items-center gap-sm text-label uppercase text-faint">
           <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden="true" />
-          Outcome contract · quote
+          Outcome contract · underwriting
         </p>
-        {(phase === "quoted" || phase === "counter-open") && (
+        {(phase === "plans" || phase === "counter-open") && (
           <p
             className={`tabular text-meta ${urgent ? "font-semibold text-fail" : "text-mute"}`}
             role="timer"
@@ -98,77 +112,104 @@ export function QuoteScreen({ quote }: { quote: QuoteBreakdown }) {
         )}
       </div>
 
-      <article className="overflow-hidden rounded-xl border border-line bg-panel shadow-card" aria-live="polite">
-        <div className="h-0.5 w-full bg-panel-3">
-          <div
-            className={`h-full transition-[width] duration-1000 ease-linear ${urgent ? "bg-fail" : "bg-accent"}`}
-            style={{ width: `${validityPct}%` }}
-            aria-hidden="true"
-          />
-        </div>
-
-        <div className="flex flex-col gap-xs px-lg pt-xl md:px-xl">
+      <header className="mb-xl flex flex-col gap-md">
+        <h1 className="max-w-2xl text-headline">Three ways to get the outcome.</h1>
+        <div className="flex flex-wrap items-center gap-md rounded-lg border border-line bg-panel px-md py-sm shadow-card">
           <span className="text-label uppercase text-faint">Task</span>
-          <h1 className="text-title">Implement {PARSE_DURATION_PROBLEM.functionName}()</h1>
-          <pre className="tabular mt-xs w-fit rounded-md border border-line bg-well px-sm py-xs text-data text-mute">
-{PARSE_DURATION_PROBLEM.signature}
-          </pre>
-          <p className="mt-sm max-w-[36rem] text-body-sm text-mute">{PARSE_DURATION_PROBLEM.description}</p>
+          <span className="text-body-sm font-medium">Implement {PARSE_DURATION_PROBLEM.functionName}()</span>
+          <code className="tabular hidden text-meta text-mute lg:block">{PARSE_DURATION_PROBLEM.signature}</code>
+          <span className="hidden h-3 w-px bg-line-strong sm:block" aria-hidden="true" />
+          <Badge tone="pass">{PARSE_DURATION_TESTS.length}-test verified outcome</Badge>
         </div>
+        <p className="max-w-[36rem] text-body-sm text-mute">
+          Each plan is a real execution policy the engine will follow — a different tradeoff between cost, confidence,
+          and speed. The outcome is identical in all three: all tests pass, or you are refunded.
+        </p>
+      </header>
 
-        <div className="mx-lg my-lg grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-line bg-line md:mx-xl lg:grid-cols-3">
-          <Term k="Verification" v={`${PARSE_DURATION_TESTS.length} tests — ${PARSE_DURATION_TESTS.length - 2} visible, 2 hidden. Binary: all pass or nothing ships.`} />
-          <Term k="Guarantee" v="You pay for the completed outcome only. If Margin402 cannot verify it, the contract is refunded." />
-          <Term k="Execution policy" v="Margin402 selects providers and manages every payment internally. Internal economics are not disclosed." />
-        </div>
+      <div className="grid grid-cols-1 gap-md md:grid-cols-3 md:pt-xs">
+        {plans.map((plan, i) => (
+          <div key={plan.id} className="animate-fade-up" style={{ animationDelay: `${i * 90}ms` }}>
+            <PlanCard
+              plan={plan}
+              selected={selectedId === plan.id}
+              expanded={expandedId === plan.id}
+              onChoose={() => choosePlan(plan)}
+              onToggleExpand={() => setExpandedId((cur) => (cur === plan.id ? null : plan.id))}
+            />
+          </div>
+        ))}
+      </div>
 
-        <div className="border-t border-line bg-base/40 px-lg py-xl md:px-xl">
-          {phase === "expired" ? (
-            <div className="flex flex-col items-start justify-between gap-md md:flex-row md:items-center">
-              <div>
-                <p className="text-label uppercase text-fail">Quote expired</p>
-                <p className="mt-xs text-body-sm text-mute">This validity window closed without acceptance.</p>
-              </div>
-              <Button variant="secondary" onClick={restartValidity}>
-                Request fresh quote
+      <div id="plan-confirm" className="mt-xl scroll-mt-28">
+        {phase === "expired" ? (
+          <div className="flex flex-col items-start justify-between gap-md rounded-xl border border-fail-line bg-fail-dim p-lg md:flex-row md:items-center">
+            <div>
+              <p className="text-label uppercase text-fail">Quote expired</p>
+              <p className="mt-xs text-body-sm text-mute">This validity window closed without acceptance.</p>
+            </div>
+            <Button variant="secondary" onClick={restartValidity}>
+              Request fresh quote
+            </Button>
+          </div>
+        ) : phase === "confirming" ? (
+          <div className="flex items-center gap-sm rounded-xl border border-accent-line bg-accent-dim p-lg" role="status">
+            <Spinner className="text-accent" />
+            <span className="text-body-sm text-mute">
+              Opening execution under the {selected?.name} policy…
+            </span>
+          </div>
+        ) : !selected ? (
+          recommended && (
+            <div className="flex flex-col items-start justify-between gap-md rounded-xl border border-line bg-panel p-lg shadow-card md:flex-row md:items-center">
+              <p className="max-w-[36rem] text-body-sm text-mute">
+                Not sure? The engine recommends <span className="font-semibold text-ink">{recommended.name}</span> —{" "}
+                {recommended.recommendationReason?.toLowerCase()}
+              </p>
+              <Button variant="secondary" onClick={() => choosePlan(recommended)}>
+                Choose recommended
               </Button>
             </div>
-          ) : phase === "confirming" ? (
-            <div className="flex items-center gap-sm py-md" role="status">
-              <Spinner className="text-accent" />
-              <span className="text-body-sm text-mute">Opening execution — Margin402 is taking the job…</span>
+          )
+        ) : (
+          <div className="animate-scale-in overflow-hidden rounded-xl border border-accent-line bg-panel shadow-lift" aria-live="polite">
+            <div className="h-0.5 w-full bg-panel-3">
+              <div
+                className={`h-full transition-[width] duration-1000 ease-linear ${urgent ? "bg-fail" : "bg-accent"}`}
+                style={{ width: `${validityPct}%` }}
+                aria-hidden="true"
+              />
             </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-xl lg:grid-cols-12">
-              <div className="flex flex-col justify-between lg:col-span-7">
-                <div>
-                  <span className="text-label uppercase text-faint">
-                    {acceptedOffer !== null ? "Agreed price" : "Your price"}
-                  </span>
-                  <div className="tabular mt-xs text-price">{formatUsd(displayPrice)}</div>
-                  <div className="mt-md">
-                    <Badge tone="pass">Verified outcome</Badge>
-                  </div>
-                </div>
-                {phase === "quoted" && (
-                  <div className="mt-xl flex flex-col items-stretch gap-sm sm:flex-row sm:items-center">
-                    <Button size="lg" onClick={() => handleAccept(quote.quote)} className="sm:w-auto">
-                      Accept quote
-                    </Button>
-                    <Button size="lg" variant="ghost" onClick={() => setPhase("counter-open")}>
-                      Make one counteroffer
-                    </Button>
-                  </div>
-                )}
+            <div className="grid grid-cols-1 gap-xl p-lg lg:grid-cols-12 lg:p-xl">
+              <div className="lg:col-span-7">
+                <span className="text-label uppercase text-faint">Selected plan</span>
+                <h2 className="mt-xs text-title">
+                  {selected.name} · <span className="text-mute">{selected.objective}</span>
+                </h2>
+                <div className="tabular mt-md text-price leading-none">{formatUsd(displayPrice)}</div>
+                <p className="mt-sm max-w-[28rem] text-body-sm text-mute">
+                  Fixed price for a verified outcome. Margin402 pays every provider bill along the{" "}
+                  {selected.name} path; if it cannot verify the result, the contract is refunded.
+                </p>
               </div>
 
-              <div className="lg:col-span-5" aria-live="polite">
-                {phase === "quoted" && (
-                  <ul className="flex flex-col gap-sm border-l border-line pl-md text-body-sm text-mute">
-                    <li>Fixed price — no meters, no overruns.</li>
-                    <li>Settlement receipts published on completion.</li>
-                    <li>One sealed counteroffer permitted per contract.</li>
-                  </ul>
+              <div className="flex flex-col justify-between gap-md lg:col-span-5" aria-live="polite">
+                {phase === "plans" && (
+                  <>
+                    <ul className="flex flex-col gap-xs border-l border-line pl-md text-body-sm text-mute">
+                      <li>Fixed price — no meters, no overruns.</li>
+                      <li>Settlement receipts published on completion.</li>
+                      <li>One sealed counteroffer permitted per contract.</li>
+                    </ul>
+                    <div className="flex flex-col items-stretch gap-sm sm:flex-row sm:items-center">
+                      <Button size="lg" onClick={() => handleAccept(selected.price)}>
+                        Accept &amp; execute
+                      </Button>
+                      <Button size="lg" variant="ghost" onClick={() => setPhase("counter-open")}>
+                        Make one counteroffer
+                      </Button>
+                    </div>
+                  </>
                 )}
 
                 {phase === "counter-open" && (
@@ -177,7 +218,7 @@ export function QuoteScreen({ quote }: { quote: QuoteBreakdown }) {
                       <label htmlFor="counter-input" className="text-label uppercase text-faint">
                         Your offer
                       </label>
-                      <span className="tabular text-meta text-faint line-through">{formatUsd(quote.quote)}</span>
+                      <span className="tabular text-meta text-faint line-through">{formatUsd(selected.price)}</span>
                     </div>
                     <div className="relative mt-sm">
                       <span className="tabular absolute top-1/2 left-sm -translate-y-1/2 text-body text-faint">$</span>
@@ -188,7 +229,7 @@ export function QuoteScreen({ quote }: { quote: QuoteBreakdown }) {
                         inputMode="decimal"
                         step="0.01"
                         min="0.10"
-                        max={(quote.quote - 0.01).toFixed(2)}
+                        max={(selected.price - 0.01).toFixed(2)}
                         value={counterInput}
                         onChange={(e) => setCounterInput(e.target.value)}
                         onKeyDown={(e) => e.key === "Enter" && handleSubmitCounter()}
@@ -205,7 +246,7 @@ export function QuoteScreen({ quote }: { quote: QuoteBreakdown }) {
                         {isPending ? "Evaluating…" : "Submit offer"}
                       </Button>
                       {!counterSpent && (
-                        <Button variant="ghost" onClick={() => setPhase("quoted")}>
+                        <Button variant="ghost" onClick={() => setPhase("plans")}>
                           Cancel
                         </Button>
                       )}
@@ -216,30 +257,22 @@ export function QuoteScreen({ quote }: { quote: QuoteBreakdown }) {
                 {phase === "counter-result" && result && (
                   <CounterVerdict
                     result={result}
-                    quoted={quote.quote}
+                    quoted={selected.price}
                     onAcceptAccepted={() => handleAccept(result.offer)}
-                    onAcceptOriginal={() => handleAccept(quote.quote)}
+                    onAcceptOriginal={() => handleAccept(selected.price)}
                   />
                 )}
               </div>
             </div>
-          )}
-        </div>
-      </article>
+          </div>
+        )}
+      </div>
 
       <p className="mt-md text-center text-meta text-faint">
-        Provider pricing along this contract follows a simulated provider market; every payment against it is real.
+        Provider pricing follows a simulated provider market; every payment against it settles for real on Algorand
+        Testnet.
       </p>
     </section>
-  );
-}
-
-function Term({ k, v }: { k: string; v: string }) {
-  return (
-    <div className="bg-panel p-md">
-      <p className="text-label uppercase text-faint">{k}</p>
-      <p className="mt-xs text-body-sm leading-relaxed text-mute">{v}</p>
-    </div>
   );
 }
 
@@ -262,18 +295,8 @@ function CounterVerdict({
       }`}
       role="status"
     >
-      <p className="flex items-center gap-xs text-label uppercase">
-        {accepted ? (
-          <>
-            <CheckIcon className="text-pass" />
-            <span className="text-pass">Counteroffer accepted</span>
-          </>
-        ) : (
-          <>
-            <CrossIcon className="text-fail" />
-            <span className="text-fail">Offer declined</span>
-          </>
-        )}
+      <p className={`text-label uppercase ${accepted ? "text-pass" : "text-fail"}`}>
+        {accepted ? "Counteroffer accepted" : "Offer declined"}
       </p>
       <p className="tabular mt-sm text-[28px] font-semibold tracking-tight">{formatUsd(result.offer)}</p>
       <p className="mt-xs text-body-sm text-mute">
@@ -290,23 +313,5 @@ function CounterVerdict({
         )}
       </div>
     </div>
-  );
-}
-
-function CheckIcon({ className }: { className?: string }) {
-  return (
-    <svg className={`h-3.5 w-3.5 ${className ?? ""}`} viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.4" />
-      <path d="M5 8.2l2 2 4-4.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function CrossIcon({ className }: { className?: string }) {
-  return (
-    <svg className={`h-3.5 w-3.5 ${className ?? ""}`} viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.4" />
-      <path d="M5.5 5.5l5 5m0-5l-5 5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-    </svg>
   );
 }

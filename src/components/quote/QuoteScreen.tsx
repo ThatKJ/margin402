@@ -99,7 +99,7 @@ export function QuoteScreen({ quotePrice, plans }: { quotePrice: number; plans: 
       <div className="mb-md flex items-center justify-between">
         <p className="flex items-center gap-sm text-label uppercase text-faint">
           <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden="true" />
-          Autonomous job · job quote
+          Agent request · machine-to-machine
         </p>
         {(phase === "plans" || phase === "counter-open") && (
           <p
@@ -120,6 +120,15 @@ export function QuoteScreen({ quotePrice, plans }: { quotePrice: number; plans: 
           <code className="tabular hidden text-meta text-mute lg:block">{PARSE_DURATION_PROBLEM.signature}</code>
           <span className="hidden h-3 w-px bg-line-strong sm:block" aria-hidden="true" />
           <Badge tone="pass">{PARSE_DURATION_TESTS.length}-test verified outcome</Badge>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-md gap-y-1 rounded-lg border border-line bg-well px-md py-xs">
+          <span className="text-label uppercase text-faint">Customer agent</span>
+          <code className="tabular text-meta text-ink">parse-duration-agent</code>
+          <span className="flex items-center gap-1.5 text-meta text-mute">
+            <span className="h-1.5 w-1.5 rounded-full bg-pass" aria-hidden="true" />
+            Active
+          </span>
+          <span className="text-meta text-faint">Policy: outcome-required · payment: x402</span>
         </div>
         <p className="max-w-[36rem] text-body-sm text-mute">
           Each plan is a real execution policy the engine will follow — a different tradeoff between cost, confidence,
@@ -203,7 +212,7 @@ export function QuoteScreen({ quotePrice, plans }: { quotePrice: number; plans: 
                     </ul>
                     <div className="flex flex-col items-stretch gap-sm sm:flex-row sm:items-center">
                       <Button size="lg" onClick={() => handleAccept(selected.price)}>
-                        Accept &amp; execute
+                        Authorize agent run
                       </Button>
                       <Button size="lg" variant="ghost" onClick={() => setPhase("counter-open")}>
                         Make one counteroffer
@@ -310,22 +319,25 @@ function NegotiationTimeline({
       <p className="text-label uppercase text-faint">Autonomous negotiation</p>
 
       <ol className="mt-sm flex flex-col gap-0">
-        <NegotiationStep num="01" label="Proposed execution budget" value={formatUsd(quoted)} state="done" />
+        <NegotiationStep num="01" agent="MARGIN402 AGENT" label="Proposed execution budget" value={formatUsd(quoted)} state="done" />
         <NegotiationStep
           num="02"
+          agent="CUSTOMER AGENT"
           label="Counteroffer submitted"
           value={Number.isFinite(offered) && offered > 0 ? formatUsd(offered) : "—"}
           state={pending || locked ? "done" : "active"}
         />
         <NegotiationStep
           num="03"
-          label={pending ? "Margin402 is evaluating provider economics…" : "Evaluating provider economics"}
+          agent="MARGIN402 AGENT"
+          label={pending ? "Evaluating provider economics…" : "Evaluated provider economics"}
           value={pending ? formatUsd(animated) : undefined}
           state={pending ? "active" : locked ? "done" : "idle"}
         />
         {locked && result && (
           <NegotiationStep
             num="04"
+            agent="POLICY ENGINE"
             label={accepted ? "Budget accepted — negotiation closed" : "Offer rejected — recalculating"}
             value={accepted ? formatUsd(result.offer) : undefined}
             state={accepted ? "pass" : "fail"}
@@ -358,6 +370,7 @@ function NegotiationTimeline({
 
 function NegotiationStep({
   num,
+  agent,
   label,
   value,
   state,
@@ -365,6 +378,7 @@ function NegotiationStep({
   final = false,
 }: {
   num: string;
+  agent: string;
   label: string;
   value?: string;
   state: "idle" | "active" | "done" | "pass" | "fail";
@@ -392,11 +406,12 @@ function NegotiationStep({
         />
       )}
       <div className="min-w-0">
-        <p className={`text-body-sm ${state === "idle" ? "text-faint" : "text-mute"}`}>
-          <span className="tabular mr-2 text-[10px] text-faint">{num}</span>
-          {label}
+        <p className={`tabular text-[9px] tracking-[0.12em] uppercase ${state === "idle" ? "text-faint/70" : "text-faint"}`}>
+          <span className="mr-2">{num}</span>
+          {agent}
         </p>
-        {note && <p className="mt-0.5 pl-6 text-meta text-faint">{note}</p>}
+        <p className={`text-body-sm ${state === "idle" ? "text-faint" : "text-mute"}`}>{label}</p>
+        {note && <p className="mt-0.5 text-meta text-faint">{note}</p>}
       </div>
       {value && <span className={`tabular shrink-0 text-data font-semibold ${tone}`}>{value}</span>}
     </li>

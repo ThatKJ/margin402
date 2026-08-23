@@ -6,7 +6,7 @@ function Line({ children }: { children: React.ReactNode }) {
 
 export function MachineApi() {
   return (
-    <section className="border-t border-line bg-panel">
+    <section id="machine-api" className="scroll-mt-20 border-t border-line bg-panel">
       <div className="mx-auto grid max-w-[1200px] grid-cols-1 gap-xl px-margin-mobile py-section md:grid-cols-12 md:px-margin-desktop">
         <div className="md:col-span-5">
           <Reveal>

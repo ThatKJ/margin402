@@ -110,10 +110,12 @@ export function StatementScreen() {
             </Badge>
           </div>
           <div className="mt-2 flex flex-col gap-1 font-mono text-data text-faint">
+            <MetaRow label="Customer agent" value="parse-duration-agent" />
             <MetaRow label="Plan" value={planName} />
+            <MetaRow label="Attempts" value={String(view.rows.filter((r) => r.kind === "paid").length)} />
+            <MetaRow label="Providers paid" value={String(new Set(events.filter((e) => e.type === "payment").map((e) => e.strategyId)).size)} />
             <MetaRow label="Duration" value={durationMs !== null ? `${durationMs}ms` : "—"} />
             <MetaRow label="Constraints" value={finalVerification ? `${finalVerification.passed}/${finalVerification.total} pass` : `${view.rows.filter((r) => r.kind === "paid").at(-1)?.passed ?? 0}/8`} />
-            <MetaRow label="Timestamp" value={endedAt ? new Date(endedAt).toISOString() : "—"} />
           </div>
         </div>
       </header>
@@ -184,18 +186,32 @@ export function StatementScreen() {
 
 {settlements.length > 0 && (
               <div className="rounded-xl border border-line bg-panel shadow-card">
-                <h3 className="mb-sm text-label uppercase text-faint p-md border-b border-line">Settlement receipt</h3>
+                <h3 className="text-label uppercase text-faint p-md border-b border-line">Settlement receipts · x402</h3>
                 <div className="p-md space-y-md">
                   <ReceiptRow label="Network" value="Algorand Testnet" />
                   <ReceiptRow label="Asset" value="USDC (ASA 10458941)" />
                   <ReceiptRow label="Facilitator" value={facilitatorHost} />
                   <ReceiptRow label="Status" value="Settled" tone="pass" />
-                  {(() => {
-                    const lastTx = settlements[settlements.length - 1];
-                    if (!lastTx?.txId) return null;
-                    return <ReceiptRow label="Transaction" value={<CopyField value={lastTx.txId} label={lastTx.txId.slice(0, 12)} />} />;
-                  })()}
                 </div>
+                <ul className="border-t border-line divide-y divide-line">
+                  {settlements.map((s, i) => (
+                    <li key={`${s.txId}-${i}`} className="flex items-center justify-between gap-sm px-md py-sm">
+                      <div className="min-w-0">
+                        <p className="text-body-sm text-ink">{strategyLabel(s.strategyId)} Agent</p>
+                        <a
+                          href={`https://lora.algokit.io/testnet/transaction/${s.txId!}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="tabular block truncate text-meta text-faint transition-colors hover:text-accent"
+                          title={s.txId!}
+                        >
+                          {s.txId!.slice(0, 14)}… ↗
+                        </a>
+                      </div>
+                      <span className="tabular shrink-0 text-data text-pass">Settled</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
 

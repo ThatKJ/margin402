@@ -14,21 +14,19 @@ export function Hero() {
             Autonomous outcome underwriting
           </p>
           <h1 className="animate-fade-up text-display">
-            <span className="text-faint">Autonomous agents should buy outcomes.</span>
-            <br />
-            Not API calls.
+            <span className="text-faint">Let AI agents buy outcomes.</span>
           </h1>
           <p className="animate-fade-up mt-lg max-w-xl text-body text-mute [animation-delay:120ms]">
-            Margin402 gives AI agents a controlled execution budget, negotiates access to paid services through x402,
-            verifies every result, and adapts spending until the requested outcome is achieved.
+            Margin402 lets autonomous agents negotiate, pay, verify, and retry specialized services through x402 — so
+            software can purchase reliable outcomes without human intervention. Humans watch. Agents transact.
           </p>
           <div className="animate-fade-up mt-xl flex flex-col items-center gap-sm sm:flex-row [animation-delay:220ms]">
             <ButtonLink href="/quote" size="lg" variant="primary" className="group w-full sm:w-auto">
-              Run an outcome
+              Run agent demo
               <ArrowRight />
             </ButtonLink>
-            <ButtonLink href="#how-it-works" size="lg" variant="secondary" className="w-full sm:w-auto">
-              See how it works
+            <ButtonLink href="#machine-api" size="lg" variant="secondary" className="w-full sm:w-auto">
+              View agent API
             </ButtonLink>
           </div>
         </div>

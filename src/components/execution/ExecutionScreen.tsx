@@ -117,7 +117,7 @@ export function ExecutionScreen() {
             <span className={`h-1.5 w-1.5 rounded-full ${streamOpen ? "bg-pass animate-pulse" : "bg-faint"}`} aria-hidden="true" />
             Execution
             <span className="h-3 w-px bg-line-strong" aria-hidden="true" />
-            <span className="text-accent">Plan · {PLAN_NAMES[activePlanId]}</span>
+            <span className="text-accent">Live agent run · {PLAN_NAMES[activePlanId]}</span>
           </div>
           <h1 className="text-headline leading-tight text-ink">
             {running
@@ -305,7 +305,7 @@ function AttemptCard({ row, previous, verificationEvent }: AttemptCardProps) {
         <div className="mb-lg flex items-center justify-between border-b border-white/15 pb-lg">
           <div className="flex items-center gap-sm">
             <span className="text-label uppercase text-faint">Final attempt</span>
-            <Tag>{strategyLabel(row.strategyId)}</Tag>
+            <Tag>{strategyLabel(row.strategyId)} Agent</Tag>
           </div>
           <span className="tabular font-mono text-faint">-{formatUsd(row.price)}</span>
         </div>
@@ -342,7 +342,7 @@ function AttemptCard({ row, previous, verificationEvent }: AttemptCardProps) {
       <div className="mb-md flex items-center justify-between">
         <div className="flex items-center gap-sm">
           <span className="text-label uppercase text-faint">Attempt {String(row.round).padStart(2, "0")}</span>
-          <Tag>{strategyLabel(row.strategyId)}</Tag>
+          <Tag>{strategyLabel(row.strategyId)} Agent</Tag>
         </div>
         <span className="tabular font-mono text-faint">-{formatUsd(row.price)}</span>
       </div>
@@ -395,7 +395,7 @@ function RejectedRowCard({ row }: { row: Extract<TimelineRow, { kind: "rejected"
         </svg>
         <div className="flex flex-col">
           <div className="flex items-center gap-sm">
-            <Tag>{strategyLabel(row.strategyId)}</Tag>
+            <Tag>{strategyLabel(row.strategyId)} Agent</Tag>
             <span className="text-label uppercase text-fail">Rejected</span>
           </div>
           <p className="mt-xs text-body-sm text-mute">{row.reason}</p>
@@ -437,7 +437,7 @@ function RejectionSequence({
 
       {beat >= 1 && (
         <div className="animate-scale-in mb-md rounded-lg border border-line bg-panel-2 p-md shadow-card">
-          <span className="text-label uppercase text-faint">{strategyLabel(rejected.strategyId)} requested</span>
+          <span className="text-label uppercase text-faint">{strategyLabel(rejected.strategyId)} Agent requested</span>
           <p className="mt-xs tabular text-stat">{formatUsd(rejected.price)}</p>
         </div>
       )}
@@ -456,8 +456,8 @@ function RejectionSequence({
         <div className="animate-scale-in mb-md rounded-lg border border-line bg-panel-2 p-md">
           <p className="text-label uppercase text-faint">Expected cost-to-success</p>
           <div className="mt-sm flex flex-col gap-sm">
-            <Bar label={altLabel} value={altEcs} max={Math.max(thisEcs, altEcs)} tone="accent" />
-            <Bar label={strategyLabel(rejected.strategyId)} value={thisEcs} max={Math.max(thisEcs, altEcs)} tone="fail" />
+            <Bar label={`${altLabel} Agent`} value={altEcs} max={Math.max(thisEcs, altEcs)} tone="accent" />
+            <Bar label={`${strategyLabel(rejected.strategyId)} Agent`} value={thisEcs} max={Math.max(thisEcs, altEcs)} tone="fail" />
           </div>
         </div>
       )}

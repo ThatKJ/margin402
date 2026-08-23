@@ -9,7 +9,6 @@ import { useJob } from "@/lib/state/job-context";
 import type { JobEvent } from "@/lib/orchestrator/types";
 import { Button } from "@/components/primitives/Button";
 import { Badge } from "@/components/primitives/Badge";
-import { CopyField } from "@/components/primitives/CopyField";
 
 type RevealStage = "revenue" | "cost" | "margin" | "verdict" | "done";
 const STAGE_ORDER: RevealStage[] = ["revenue", "cost", "margin", "verdict", "done"];

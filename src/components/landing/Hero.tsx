@@ -16,7 +16,7 @@ export function Hero() {
           <h1 className="animate-fade-up text-display">
             <span className="text-faint">Let AI agents buy outcomes.</span>
           </h1>
-          <p className="animate-fade-up mt-lg max-w-xl text-body text-mute [animation-delay:120ms]">
+          <p className="animate-fade-up mt-lg max-w-[36rem] text-body text-mute [animation-delay:120ms]">
             Margin402 lets autonomous agents negotiate, pay, verify, and retry specialized services through x402 — so
             software can purchase reliable outcomes without human intervention. Humans watch. Agents transact.
           </p>

@@ -7,6 +7,7 @@ import type { TimelineRow } from "@/lib/ui/derive";
 import { formatUsd } from "@/lib/ui/format";
 import { useCountUp, wait, usePrefersReducedMotion } from "@/lib/ui/motion";
 import { useJob } from "@/lib/state/job-context";
+import { getDefaultJobType } from "@/lib/workloads/job-types";
 import { SIMULATED_MARKET_LABEL } from "@/lib/providers/price-curve";
 import type { JobEvent, JobOutcome } from "@/lib/orchestrator/types";
 import type { StepDecision } from "@/lib/economics/types";
@@ -19,13 +20,14 @@ const PLAN_NAMES: Record<string, string> = {
 
 export function ExecutionScreen() {
   const router = useRouter();
-  const { revenue, jobId, events, pushEvent, outcome, planId } = useJob();
+  const { revenue, jobId, events, pushEvent, outcome, planId, customerAgentId } = useJob();
   const hasEvents = events.length > 0;
   const scrollAnchorRef = useRef<HTMLDivElement | null>(null);
   const reducedMotion = usePrefersReducedMotion();
   const [streamOpen, setStreamOpen] = useState(false);
   const [streamLost, setStreamLost] = useState(false);
   const activePlanId = planId ?? "best-value";
+  const jobType = getDefaultJobType();
 
   useEffect(() => {
     if (revenue === null) router.replace("/quote");
@@ -128,10 +130,13 @@ export function ExecutionScreen() {
                   ? "Contract refunded"
                   : "Execution failed"}
           </h1>
+          <p className="text-body-sm text-mute">
+            {jobType.title} · requested by <span className="tabular text-ink">{customerAgentId}</span>
+          </p>
           <div className="mt-xs flex items-center gap-sm font-mono text-data text-faint">
-            <span>parseDuration()</span>
+            <span>{jobType.functionSignature.match(/^function\s+(\w+)/)?.[1] ?? jobType.title}()</span>
             <span className="h-1 w-1 rounded-full bg-line-strong" aria-hidden="true" />
-            <span>8 verification tests</span>
+            <span>{jobType.testCount} verification tests</span>
           </div>
           <p className="text-meta text-faint">Provider pricing shown is a {SIMULATED_MARKET_LABEL}.</p>
         </div>

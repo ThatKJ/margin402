@@ -1,7 +1,19 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { JobEvent, JobOutcome, PlanId } from "@/lib/orchestrator/types";
+import { generateCustomerAgentId } from "@/lib/workloads/job-types";
+
+/**
+ * A fixed, deterministic placeholder — never what's actually shown for long.
+ * generateCustomerAgentId() uses Math.random(), which produces a different
+ * value during SSR than during the client's first render; seeding useState
+ * with it directly caused a real hydration mismatch (server and client
+ * disagreeing on the rendered agent id text). The real id is assigned in an
+ * effect below, after hydration has already reconciled against this same
+ * placeholder on both sides.
+ */
+const AGENT_ID_PLACEHOLDER = "demo-agent-····";
 
 interface JobState {
   revenue: number | null;
@@ -32,6 +44,14 @@ interface JobState {
 
 interface JobContextValue extends JobState {
   /**
+   * This browser tab's reference Customer Agent identity — the demo
+   * operator is configuring/observing this agent, not acting as the
+   * customer themselves (see CLAUDE.md). Stable for the life of the tab,
+   * not reset between job requests: a real agent doesn't get a new
+   * identity every time it submits a new job.
+   */
+  customerAgentId: string;
+  /**
    * jobId is optional: the legacy path (no wallet, quote accepted at full
    * price with no customer x402 authorization) still generates its own id
    * client-side, same as before. The wallet-authorized path always has a
@@ -59,6 +79,11 @@ const JobContext = createContext<JobContextValue | null>(null);
  */
 export function JobProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<JobState>(EMPTY_STATE);
+  const [customerAgentId, setCustomerAgentId] = useState(AGENT_ID_PLACEHOLDER);
+
+  useEffect(() => {
+    setCustomerAgentId(generateCustomerAgentId());
+  }, []);
 
   const acceptQuote = useCallback((revenue: number, planId: PlanId, jobId?: string) => {
     setState({ revenue, jobId: jobId ?? crypto.randomUUID(), events: [], outcome: null, planId, startedAt: null, endedAt: null });
@@ -76,7 +101,10 @@ export function JobProvider({ children }: { children: React.ReactNode }) {
 
   const reset = useCallback(() => setState(EMPTY_STATE), []);
 
-  const value = useMemo(() => ({ ...state, acceptQuote, pushEvent, reset }), [state, acceptQuote, pushEvent, reset]);
+  const value = useMemo(
+    () => ({ ...state, customerAgentId, acceptQuote, pushEvent, reset }),
+    [state, customerAgentId, acceptQuote, pushEvent, reset],
+  );
 
   return <JobContext.Provider value={value}>{children}</JobContext.Provider>;
 }

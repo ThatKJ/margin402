@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { submitCounteroffer, acceptPlan } from "@/lib/actions/quote-actions";
-import { PARSE_DURATION_PROBLEM, PARSE_DURATION_TESTS } from "@/lib/workloads/parse-duration";
+import { getDefaultJobType } from "@/lib/workloads/job-types";
 import { formatUsd } from "@/lib/ui/format";
 import { useCountUp } from "@/lib/ui/motion";
 import { useJob } from "@/lib/state/job-context";
@@ -32,8 +32,9 @@ type Phase =
 
 export function QuoteScreen({ quotePrice, plans }: { quotePrice: number; plans: CustomerPlan[] }) {
   const router = useRouter();
-  const { acceptQuote, reset } = useJob();
+  const { acceptQuote, reset, customerAgentId } = useJob();
   const wallet = useWallet();
+  const jobType = getDefaultJobType();
 
   const [phase, setPhase] = useState<Phase>("plans");
   const [selectedId, setSelectedId] = useState<PlanId | null>(null);
@@ -143,7 +144,7 @@ export function QuoteScreen({ quotePrice, plans }: { quotePrice: number; plans: 
       <div className="mb-md flex items-center justify-between">
         <p className="flex items-center gap-sm text-label uppercase text-faint">
           <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden="true" />
-          Agent request · machine-to-machine
+          Reference agent console
         </p>
         {(phase === "plans" || phase === "counter-open") && (
           <p
@@ -158,16 +159,21 @@ export function QuoteScreen({ quotePrice, plans }: { quotePrice: number; plans: 
 
       <header className="mb-xl flex flex-col gap-md">
         <h1 className="max-w-2xl text-headline">Three ways to get the outcome.</h1>
+        <p className="max-w-[36rem] text-meta text-faint">
+          You&apos;re configuring a reference Customer Agent for this demo. Production agents submit the same request
+          directly through the Margin402 API — no human required.
+        </p>
         <div className="flex flex-wrap items-center gap-md rounded-lg border border-line bg-panel px-md py-sm shadow-card">
-          <span className="text-label uppercase text-faint">Job</span>
-          <span className="text-body-sm font-medium">Implement {PARSE_DURATION_PROBLEM.functionName}()</span>
-          <code className="tabular hidden text-meta text-mute lg:block">{PARSE_DURATION_PROBLEM.signature}</code>
+          <span className="text-label uppercase text-faint">Job type</span>
+          <Badge tone="neutral">{jobType.jobTypeLabel}</Badge>
+          <span className="text-body-sm font-medium">{jobType.title}</span>
+          <code className="tabular hidden text-meta text-mute lg:block">{jobType.functionSignature}</code>
           <span className="hidden h-3 w-px bg-line-strong sm:block" aria-hidden="true" />
-          <Badge tone="pass">{PARSE_DURATION_TESTS.length}-test verified outcome</Badge>
+          <Badge tone="pass">{jobType.testCount}-test verified outcome</Badge>
         </div>
         <div className="flex flex-wrap items-center gap-x-md gap-y-1 rounded-lg border border-line bg-well px-md py-xs">
           <span className="text-label uppercase text-faint">Customer agent</span>
-          <code className="tabular text-meta text-ink">parse-duration-agent</code>
+          <code className="tabular text-meta text-ink">{customerAgentId}</code>
           <span className="flex items-center gap-1.5 text-meta text-mute">
             <span className="h-1.5 w-1.5 rounded-full bg-pass" aria-hidden="true" />
             Active

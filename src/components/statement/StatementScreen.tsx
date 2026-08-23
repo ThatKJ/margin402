@@ -6,6 +6,7 @@ import { deriveExecutionView, strategyLabel } from "@/lib/ui/derive";
 import { formatUsd } from "@/lib/ui/format";
 import { useCountUp, wait, usePrefersReducedMotion } from "@/lib/ui/motion";
 import { useJob } from "@/lib/state/job-context";
+import { getDefaultJobType } from "@/lib/workloads/job-types";
 import type { JobEvent } from "@/lib/orchestrator/types";
 import { Button } from "@/components/primitives/Button";
 import { Badge } from "@/components/primitives/Badge";
@@ -15,8 +16,9 @@ const STAGE_ORDER: RevealStage[] = ["revenue", "cost", "margin", "verdict", "don
 
 export function StatementScreen() {
   const router = useRouter();
-  const { revenue, events, outcome, startedAt, endedAt, reset, planId } = useJob();
+  const { revenue, events, outcome, startedAt, endedAt, reset, planId, customerAgentId } = useJob();
   const reducedMotion = usePrefersReducedMotion();
+  const jobType = getDefaultJobType();
   const activePlanId = planId ?? "best-value";
   const planName =
     activePlanId === "lowest-cost" ? "Lowest Cost" : activePlanId === "highest-confidence" ? "Highest Confidence" : "Best Value";
@@ -66,7 +68,9 @@ export function StatementScreen() {
 
   function handleDownloadReceipt() {
     const receipt = {
-      task: "parseDuration",
+      task: jobType.title,
+      jobType: jobType.id,
+      customerAgentId,
       outcome,
       revenue,
       executionCost: view.executionCost,
@@ -101,6 +105,7 @@ export function StatementScreen() {
           <h1 className="mt-2 text-price text-ink">
             {outcome === "VERIFIED" ? "Verified outcome" : outcome === "REFUNDED" ? "Contract refunded" : "Execution failed"}
           </h1>
+          <p className="text-body-sm text-mute">{jobType.title}</p>
         </div>
         <div className="flex flex-col gap-xs text-right md:w-64">
           <div className="flex items-center justify-end gap-sm">
@@ -109,7 +114,7 @@ export function StatementScreen() {
             </Badge>
           </div>
           <div className="mt-2 flex flex-col gap-1 font-mono text-data text-faint">
-            <MetaRow label="Customer agent" value="parse-duration-agent" />
+            <MetaRow label="Customer agent" value={customerAgentId} />
             <MetaRow label="Plan" value={planName} />
             <MetaRow label="Attempts" value={String(view.rows.filter((r) => r.kind === "paid").length)} />
             <MetaRow label="Providers paid" value={String(new Set(events.filter((e) => e.type === "payment").map((e) => e.strategyId)).size)} />

@@ -286,19 +286,37 @@ If you only have two minutes:
 
 ## 15. Real Settlement Proof
 
-A real x402 payment has been run against this exact codebase and independently verified
-on-chain (not from application logs) via the Algorand Testnet indexer:
+Real x402 payments have been run against this exact codebase and independently verified
+on-chain (not from application logs) via the Algorand Testnet indexer — both an isolated
+smoke payment and, more importantly, **the canonical demo's own final Premium payment**,
+settling for real at the exact honouring-rule moment that produces the $-0.23 margin:
 
 ```text
-Transaction ID: XCAIMTNX36Z4CV4BY4R35UA6LKE3QEX5CRY6ISJWITVPDHBIGYFQ
-Network:        Algorand Testnet
-Asset:          USDC (ASA 10458941)
-Amount:         $0.01 (10000 base units, axfer)
-Facilitator:    GoPlausible
-Fee:            0 (sponsored by the facilitator)
+Isolated smoke test — npm run x402:testnet-smoke
+Transaction ID:  XCAIMTNX36Z4CV4BY4R35UA6LKE3QEX5CRY6ISJWITVPDHBIGYFQ
+Network:         Algorand Testnet
+Asset:           USDC (ASA 10458941)
+Amount:          $0.01 (10000 base units, axfer)
+Facilitator:     GoPlausible
+Fee:             0 (sponsored by the facilitator)
 Confirmed round: 66569692
-Lora:           https://lora.algokit.io/testnet/transaction/XCAIMTNX36Z4CV4BY4R35UA6LKE3QEX5CRY6ISJWITVPDHBIGYFQ
+Lora:            https://lora.algokit.io/testnet/transaction/XCAIMTNX36Z4CV4BY4R35UA6LKE3QEX5CRY6ISJWITVPDHBIGYFQ
+
+Canonical demo, final Premium payment — npm run machine:smoke
+Transaction ID:  PSPHKWWGDD6NZQY2GT4YKIN6K5K5IG3VMIJCAM4MXCVZOI6TEVYA
+Network:         Algorand Testnet
+Asset:           USDC (ASA 10458941)
+Amount:          $1.05 (1050000 base units, axfer)
+Facilitator:     GoPlausible
+Confirmed round: 66569993
+Lora:            https://lora.algokit.io/testnet/transaction/PSPHKWWGDD6NZQY2GT4YKIN6K5K5IG3VMIJCAM4MXCVZOI6TEVYA
 ```
 
-Reproduce with `npm run x402:testnet-smoke` against a funded testnet wallet, or verify the
-transaction above directly on Lora / any Algorand Testnet indexer.
+That second transaction is the honouring-rule payment itself — Margin402 paying $1.05 against
+a $1.05 quote because the only remaining path to a verified outcome cost more than what was
+left of the budget. It settles on Algorand Testnet exactly like every other payment in this
+codebase; nothing about the "loss" in the canonical demo is simulated.
+
+Reproduce with `npm run x402:testnet-smoke` (isolated) or `npm run machine:smoke` (the full
+scenario, real payments unless `PROVIDER_CLIENT_MODE=inprocess`) against a funded testnet
+wallet, or verify either transaction above directly on Lora / any Algorand Testnet indexer.

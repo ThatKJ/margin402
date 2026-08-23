@@ -91,6 +91,7 @@ export async function GET(request: NextRequest) {
       try {
         const result = await runJob({ revenue, planId: planId ?? undefined, providerClient, onEvent: send, signal: abortController.signal });
         if (result.ledger.attempts.length > 0) settled.add(jobId);
+        if (result.error) console.error("[jobs/execute] job ended with error", jobId, result.error);
       } catch (err) {
         // A real attempt was already made if any payment event fired before
         // the throw — onEvent already streamed it, so err on the side of

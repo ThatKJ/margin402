@@ -286,37 +286,43 @@ If you only have two minutes:
 
 ## 15. Real Settlement Proof
 
-Real x402 payments have been run against this exact codebase and independently verified
-on-chain (not from application logs) via the Algorand Testnet indexer — both an isolated
-smoke payment and, more importantly, **the canonical demo's own final Premium payment**,
-settling for real at the exact honouring-rule moment that produces the $-0.23 margin:
+Real x402 payments have been run against **the live production deployment**
+(`https://margin402.vercel.app`) — not just localhost — and independently verified on-chain
+(via the Algorand Testnet indexer directly, not from application logs). This is the complete
+canonical demo, all four real settlements from a single run, ending at the exact
+honouring-rule moment that produces the $-0.23 margin:
+
+| # | Strategy | Amount | Transaction ID | Lora |
+|---|---|---|---|---|
+| 1 | Draft | $0.05 | `V6O7IJLEBK4EF2QSKXWUQCEI5B64JBVDXUIAV5DZLRPLTONRVWGQ` | [view](https://lora.algokit.io/testnet/transaction/V6O7IJLEBK4EF2QSKXWUQCEI5B64JBVDXUIAV5DZLRPLTONRVWGQ) |
+| 2 | Repair | $0.09 | `E3MKJBYBDZV3JRGAHOLWF7FLKKXXWFI7BG4SJXHOENUXNGNQOX7A` | [view](https://lora.algokit.io/testnet/transaction/E3MKJBYBDZV3JRGAHOLWF7FLKKXXWFI7BG4SJXHOENUXNGNQOX7A) |
+| 3 | Repair | $0.09 | `XZIUQPEOS62PATS2XEQVA3XZBAKCYGSMFIU4VYVGN4N6L7MY3ATA` | [view](https://lora.algokit.io/testnet/transaction/XZIUQPEOS62PATS2XEQVA3XZBAKCYGSMFIU4VYVGN4N6L7MY3ATA) |
+| 4 | Premium (honouring rule) | $1.05 | `VL6G6B4CG6ID5OSV7UXCQOZWJ6N35PSJZRLP656CBLDDFD2SXOWQ` | [view](https://lora.algokit.io/testnet/transaction/VL6G6B4CG6ID5OSV7UXCQOZWJ6N35PSJZRLP656CBLDDFD2SXOWQ) |
 
 ```text
-Isolated smoke test — npm run x402:testnet-smoke
-Transaction ID:  XCAIMTNX36Z4CV4BY4R35UA6LKE3QEX5CRY6ISJWITVPDHBIGYFQ
-Network:         Algorand Testnet
+Network:         Algorand Testnet (genesis-id testnet-v1.0)
 Asset:           USDC (ASA 10458941)
-Amount:          $0.01 (10000 base units, axfer)
 Facilitator:     GoPlausible
-Fee:             0 (sponsored by the facilitator)
-Confirmed round: 66569692
-Lora:            https://lora.algokit.io/testnet/transaction/XCAIMTNX36Z4CV4BY4R35UA6LKE3QEX5CRY6ISJWITVPDHBIGYFQ
-
-Canonical demo, final Premium payment — npm run machine:smoke
-Transaction ID:  PSPHKWWGDD6NZQY2GT4YKIN6K5K5IG3VMIJCAM4MXCVZOI6TEVYA
-Network:         Algorand Testnet
-Asset:           USDC (ASA 10458941)
-Amount:          $1.05 (1050000 base units, axfer)
-Facilitator:     GoPlausible
-Confirmed round: 66569993
-Lora:            https://lora.algokit.io/testnet/transaction/PSPHKWWGDD6NZQY2GT4YKIN6K5K5IG3VMIJCAM4MXCVZOI6TEVYA
+Total settled:   $1.28  (matches Statement's "Execution cost" exactly)
+Revenue:         $1.05
+Margin:          -$0.23
+Outcome:         VERIFIED
+Confirmed round: 66581945 (transaction #4, independently checked against the
+                 Algorand Testnet indexer — testnet-idx.algonode.cloud)
 ```
 
-That second transaction is the honouring-rule payment itself — Margin402 paying $1.05 against
-a $1.05 quote because the only remaining path to a verified outcome cost more than what was
-left of the budget. It settles on Algorand Testnet exactly like every other payment in this
-codebase; nothing about the "loss" in the canonical demo is simulated.
+Transaction #4 is the honouring-rule payment itself — Margin402 paying $1.05 against a $1.05
+quote because the only remaining path to a verified outcome cost more than what was left of
+the budget. Every one of the four settles on Algorand Testnet exactly like the others; nothing
+about the "loss" in the canonical demo is simulated, and none of it ran on localhost — this
+sequence happened against the same URL a judge would open.
 
-Reproduce with `npm run x402:testnet-smoke` (isolated) or `npm run machine:smoke` (the full
-scenario, real payments unless `PROVIDER_CLIENT_MODE=inprocess`) against a funded testnet
-wallet, or verify either transaction above directly on Lora / any Algorand Testnet indexer.
+Earlier isolated proof (kept for reference — the very first real payment run against this
+codebase, a $0.01 echo smoke test): transaction
+[`XCAIMTNX36Z4CV4BY4R35UA6LKE3QEX5CRY6ISJWITVPDHBIGYFQ`](https://lora.algokit.io/testnet/transaction/XCAIMTNX36Z4CV4BY4R35UA6LKE3QEX5CRY6ISJWITVPDHBIGYFQ),
+confirmed round 66569692.
+
+Reproduce yourself with `npm run x402:testnet-smoke` (isolated, $0.01) or `npm run
+machine:smoke` (the full scenario, real payments unless `PROVIDER_CLIENT_MODE=inprocess`)
+against a funded testnet wallet, or verify any transaction above directly on Lora / any
+Algorand Testnet indexer.

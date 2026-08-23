@@ -2,11 +2,14 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { submitCounteroffer } from "@/lib/actions/quote-actions";
+import { submitCounteroffer, acceptPlan } from "@/lib/actions/quote-actions";
 import { PARSE_DURATION_PROBLEM, PARSE_DURATION_TESTS } from "@/lib/workloads/parse-duration";
 import { formatUsd } from "@/lib/ui/format";
-import { useCountUp, wait } from "@/lib/ui/motion";
+import { useCountUp } from "@/lib/ui/motion";
 import { useJob } from "@/lib/state/job-context";
+import { useWallet } from "@/lib/wallet/WalletContext";
+import { buyPaidResourceAsCustomer } from "@/lib/x402/browser-buyer";
+import { isPeraCancellation } from "@/lib/wallet/pera-signer";
 import { Badge } from "@/components/primitives/Badge";
 import { Button } from "@/components/primitives/Button";
 import { Spinner } from "@/components/primitives/Indicators";
@@ -17,11 +20,20 @@ import type { CustomerOfferResult } from "@/lib/actions/quote-actions";
 
 const QUOTE_VALIDITY_SECONDS = 60;
 
-type Phase = "plans" | "counter-open" | "counter-result" | "confirming" | "expired";
+type Phase =
+  | "plans"
+  | "counter-open"
+  | "counter-result"
+  | "authorizing"
+  | "authorization-cancelled"
+  | "authorization-failed"
+  | "confirming"
+  | "expired";
 
 export function QuoteScreen({ quotePrice, plans }: { quotePrice: number; plans: CustomerPlan[] }) {
   const router = useRouter();
   const { acceptQuote, reset } = useJob();
+  const wallet = useWallet();
 
   const [phase, setPhase] = useState<Phase>("plans");
   const [selectedId, setSelectedId] = useState<PlanId | null>(null);
@@ -31,6 +43,7 @@ export function QuoteScreen({ quotePrice, plans }: { quotePrice: number; plans: 
   const [result, setResult] = useState<CustomerOfferResult | null>(null);
   const [counterSpent, setCounterSpent] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [authError, setAuthError] = useState<string | null>(null);
   const startedRef = useRef(false);
   const counterInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -60,15 +73,46 @@ export function QuoteScreen({ quotePrice, plans }: { quotePrice: number; plans: 
     document.getElementById("plan-confirm")?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
-  function handleAccept(amount: number) {
+  /**
+   * The real Layer 1 x402 flow (CLAUDE.md's two-sided x402 section):
+   * jobId is either already on `result` (a counteroffer that was accepted
+   * server-side already created the job) or gets created now for a
+   * full-price accept, then GET /api/jobs/authorize?jobId=X is the actual
+   * paid request — 402, Pera signs, retry, settle, all real. Only after
+   * that genuinely resolves does execution get authorized to start; a
+   * declined wallet signature never reaches "confirming"/"Job failed", it's
+   * its own cancelled state, because no autonomous run ever began.
+   */
+  async function handleAccept(amount: number, existingJobId?: string) {
     if (startedRef.current || !selected) return;
+    if (wallet.status !== "connected" || !wallet.signer) {
+      await wallet.connect();
+      return;
+    }
     startedRef.current = true;
-    setPhase("confirming");
-    void (async () => {
-      await wait(900);
-      acceptQuote(amount, selected.id);
+    setAuthError(null);
+    setPhase("authorizing");
+    try {
+      const jobId = existingJobId ?? (await acceptPlan(selected.id)).jobId;
+      const buy = await buyPaidResourceAsCustomer(`/api/jobs/authorize?jobId=${jobId}`, wallet.signer);
+      if (!buy.ok || !buy.txId) {
+        startedRef.current = false;
+        setPhase("authorization-failed");
+        setAuthError(`HTTP ${buy.status}`);
+        return;
+      }
+      setPhase("confirming");
+      acceptQuote(amount, selected.id, jobId);
       router.push("/execution");
-    })();
+    } catch (err) {
+      startedRef.current = false;
+      if (isPeraCancellation(err)) {
+        setPhase("authorization-cancelled");
+      } else {
+        setPhase("authorization-failed");
+        setAuthError(err instanceof Error ? err.message : String(err));
+      }
+    }
   }
 
   function handleSubmitCounter() {
@@ -76,7 +120,7 @@ export function QuoteScreen({ quotePrice, plans }: { quotePrice: number; plans: 
     const value = Number(counterInput);
     setCounterSpent(true);
     startTransition(async () => {
-      const evaluation = await submitCounteroffer(value);
+      const evaluation = await submitCounteroffer(value, selected.id);
       setResult(evaluation);
       setPhase("counter-result");
     });
@@ -212,13 +256,58 @@ export function QuoteScreen({ quotePrice, plans }: { quotePrice: number; plans: 
                     </ul>
                     <div className="flex flex-col items-stretch gap-sm sm:flex-row sm:items-center">
                       <Button size="lg" onClick={() => handleAccept(selected.price)}>
-                        Authorize agent run
+                        {wallet.status === "connected" ? "Authorize agent run" : "Connect Pera to authorize"}
                       </Button>
                       <Button size="lg" variant="ghost" onClick={() => setPhase("counter-open")}>
                         Make one counteroffer
                       </Button>
                     </div>
+                    <p className="text-meta text-faint">
+                      {wallet.status === "connected"
+                        ? "Pera Wallet provides the signing authority for this demo customer agent."
+                        : "A Testnet signer is required to authorize a live run — no private keys are shared with Margin402."}
+                    </p>
                   </>
+                )}
+
+                {phase === "authorizing" && (
+                  <div className="animate-scale-in rounded-lg border border-accent-line bg-accent-dim p-md" role="status">
+                    <div className="flex items-center gap-sm">
+                      <Spinner className="text-accent" />
+                      <p className="text-body-sm font-medium text-accent-deep">Authorizing contract with Pera…</p>
+                    </div>
+                    <ul className="mt-sm flex flex-col gap-1 text-body-sm text-mute">
+                      <li>✓ Job created · {formatUsd(selected.price)}</li>
+                      <li>● Requesting Margin402 — 402 Payment Required expected</li>
+                      <li className="text-faint">○ Approve the signature request in Pera Wallet</li>
+                      <li className="text-faint">○ Facilitator verifies and settles on Algorand Testnet</li>
+                    </ul>
+                  </div>
+                )}
+
+                {phase === "authorization-cancelled" && (
+                  <div className="animate-scale-in rounded-lg border border-hold/30 bg-hold-dim p-md">
+                    <p className="text-label uppercase text-hold">Authorization cancelled</p>
+                    <p className="mt-xs text-body-sm text-mute">
+                      The wallet declined the contract payment. No autonomous execution started.
+                    </p>
+                    <Button className="mt-md" variant="secondary" onClick={() => setPhase("plans")}>
+                      Try again
+                    </Button>
+                  </div>
+                )}
+
+                {phase === "authorization-failed" && (
+                  <div className="animate-scale-in rounded-lg border border-fail-line bg-fail-dim p-md">
+                    <p className="text-label uppercase text-fail">Payment not settled</p>
+                    <p className="mt-xs text-body-sm text-mute">
+                      The x402 payment could not be confirmed. No provider execution has started.
+                    </p>
+                    {authError && <p className="mt-xs text-meta text-faint">{authError}</p>}
+                    <Button className="mt-md" variant="secondary" onClick={() => setPhase("plans")}>
+                      Try again
+                    </Button>
+                  </div>
                 )}
 
                 {phase === "counter-open" && (
@@ -269,7 +358,7 @@ export function QuoteScreen({ quotePrice, plans }: { quotePrice: number; plans: 
                     offered={Number(counterInput)}
                     pending={isPending}
                     result={result}
-                    onAcceptAccepted={() => result && handleAccept(result.offer)}
+                    onAcceptAccepted={() => result && handleAccept(result.offer, result.jobId)}
                     onAcceptOriginal={() => handleAccept(selected.price)}
                   />
                 )}

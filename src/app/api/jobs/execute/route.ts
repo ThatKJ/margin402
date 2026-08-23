@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { randomUUID } from "node:crypto";
 import { runJob } from "@/lib/orchestrator/run-job";
 import { createX402ProviderClient, createInProcessProviderClient } from "@/lib/orchestrator/provider-client";
+import { getJob, markExecuting, markClosed } from "@/lib/state/job-store";
 import type { JobEvent } from "@/lib/orchestrator/types";
 
 /**
@@ -38,17 +39,40 @@ const active = new Set<string>();
 const settled = new Set<string>();
 
 export async function GET(request: NextRequest) {
-  const revenue = Number(request.nextUrl.searchParams.get("revenue"));
-  if (!Number.isFinite(revenue) || revenue <= 0) {
-    return new Response("invalid revenue", { status: 400 });
+  const requestedJobId = request.nextUrl.searchParams.get("jobId");
+  const paidJob = requestedJobId ? getJob(requestedJobId) : undefined;
+
+  // Two ways to reach execution, both real (see quote/route.ts):
+  //  - a jobId that resolves to a PAID job record: revenue is that job's
+  //    server-decided accepted price, never the raw query param — this is
+  //    the wallet-authorized path, and it's the only path that requires a
+  //    real customer x402 settlement (/api/jobs/authorize) before any
+  //    provider spend is allowed to start.
+  //  - the existing revenue=<amount> param: unchanged, for the
+  //    machine-to-machine surface that predates the job store.
+  let revenue: number;
+  if (paidJob) {
+    if (paidJob.status !== "PAID" && paidJob.status !== "EXECUTING") {
+      return new Response("job has not been authorized (customer payment not settled)", { status: 402 });
+    }
+    revenue = paidJob.acceptedPrice;
+  } else {
+    revenue = Number(request.nextUrl.searchParams.get("revenue"));
+    if (!Number.isFinite(revenue) || revenue <= 0) {
+      return new Response("invalid revenue", { status: 400 });
+    }
   }
 
-  const planId = request.nextUrl.searchParams.get("planId") as "lowest-cost" | "best-value" | "highest-confidence" | null;
+  const planId = (request.nextUrl.searchParams.get("planId") ?? paidJob?.planId) as
+    | "lowest-cost"
+    | "best-value"
+    | "highest-confidence"
+    | null;
   if (planId && !["lowest-cost", "best-value", "highest-confidence"].includes(planId)) {
     return new Response("invalid planId", { status: 400 });
   }
 
-  const jobId = request.nextUrl.searchParams.get("jobId") ?? randomUUID();
+  const jobId = requestedJobId ?? randomUUID();
   if (settled.has(jobId)) {
     return new Response("job already made real payments — this is a retry, not a new job", { status: 409 });
   }
@@ -56,6 +80,7 @@ export async function GET(request: NextRequest) {
     return new Response("job already running", { status: 409 });
   }
   active.add(jobId);
+  if (paidJob) markExecuting(jobId);
 
   const providerClient =
     process.env.PROVIDER_CLIENT_MODE === "inprocess"
@@ -111,6 +136,7 @@ export async function GET(request: NextRequest) {
         console.error("[jobs/execute] unhandled error", err);
       } finally {
         active.delete(jobId);
+        if (paidJob) markClosed(jobId);
         closed = true;
         try {
           controller.close();

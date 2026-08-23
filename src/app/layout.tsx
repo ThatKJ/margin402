@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, JetBrains_Mono } from "next/font/google";
 import { JobProvider } from "@/lib/state/job-context";
+import { WalletProvider } from "@/lib/wallet/WalletContext";
 import { SiteNav } from "@/components/layout/SiteNav";
 import { isDemoMode } from "@/lib/providers/generate";
 import "./globals.css";
@@ -31,10 +32,12 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         >
           Skip to content
         </a>
-        <JobProvider>
-          <SiteNav replayMode={isDemoMode()} />
-          <main id="main">{children}</main>
-        </JobProvider>
+        <WalletProvider>
+          <JobProvider>
+            <SiteNav replayMode={isDemoMode()} />
+            <main id="main">{children}</main>
+          </JobProvider>
+        </WalletProvider>
       </body>
     </html>
   );

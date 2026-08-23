@@ -31,7 +31,17 @@ interface JobState {
 }
 
 interface JobContextValue extends JobState {
-  acceptQuote: (revenue: number, planId: PlanId) => void;
+  /**
+   * jobId is optional: the legacy path (no wallet, quote accepted at full
+   * price with no customer x402 authorization) still generates its own id
+   * client-side, same as before. The wallet-authorized path always has a
+   * real server-issued jobId by the time this is called (from
+   * /api/quote's {accept:true} or accepted-offer response) and must pass
+   * it through unchanged — /api/jobs/execute resolves revenue from that
+   * exact id's PAID job record, so a mismatched id would 402 instead of
+   * running.
+   */
+  acceptQuote: (revenue: number, planId: PlanId, jobId?: string) => void;
   pushEvent: (event: JobEvent) => void;
   reset: () => void;
 }
@@ -50,8 +60,8 @@ const JobContext = createContext<JobContextValue | null>(null);
 export function JobProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<JobState>(EMPTY_STATE);
 
-  const acceptQuote = useCallback((revenue: number, planId: PlanId) => {
-    setState({ revenue, jobId: crypto.randomUUID(), events: [], outcome: null, planId, startedAt: null, endedAt: null });
+  const acceptQuote = useCallback((revenue: number, planId: PlanId, jobId?: string) => {
+    setState({ revenue, jobId: jobId ?? crypto.randomUUID(), events: [], outcome: null, planId, startedAt: null, endedAt: null });
   }, []);
 
   const pushEvent = useCallback((event: JobEvent) => {

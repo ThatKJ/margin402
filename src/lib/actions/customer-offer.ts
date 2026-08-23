@@ -25,6 +25,8 @@ export interface CustomerOfferResult {
   decision: OfferDecision;
   offer: number;
   rationale: string;
+  /** Set only on ACCEPT, by the caller (see quote-actions.ts / api/quote's route.ts) — the server-authoritative job this offer was accepted into. */
+  jobId?: string;
 }
 
 export function evaluateOfferForCustomer(offer: number, quote: QuoteBreakdown): CustomerOfferResult {

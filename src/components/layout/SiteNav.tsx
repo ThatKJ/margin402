@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useJob } from "@/lib/state/job-context";
+import { WalletControl } from "@/components/wallet/WalletControl";
 
 const STEPS = [
   { path: "/quote", label: "Quote", num: "01" },
@@ -86,17 +87,17 @@ export function SiteNav({ replayMode }: { replayMode: boolean }) {
         </nav>
 
         {/*
-         * Chain name deliberately omitted here — this header renders on
-         * every page, including the customer path (/quote, /execution,
-         * /statement). CLAUDE.md: "The customer path contains ZERO
-         * blockchain vocabulary... no chain names above the fold. Settlement
-         * proof goes in the statement footer in small grey type." The
-         * generation-mode indicator (cached vs live candidate code) isn't
-         * blockchain vocabulary, so it's fine to keep site-wide.
+         * The wallet control is CLAUDE.md's Layer 1 signer, visible by
+         * design as of the two-sided x402 direction — but still just a nav
+         * chip, same visual rank as the Replay/Live indicator next to it,
+         * never the dominant element on the page.
          */}
-        <div className="hidden shrink-0 items-center gap-xs rounded-sm border border-line bg-panel px-2.5 py-1 md:flex">
-          <span className={`h-1.5 w-1.5 rounded-full ${replayMode ? "bg-hold" : "bg-pass"}`} aria-hidden="true" />
-          <span className="text-label uppercase text-mute">{replayMode ? "Replay" : "Live"}</span>
+        <div className="flex shrink-0 items-center gap-xs">
+          <div className="hidden items-center gap-xs rounded-sm border border-line bg-panel px-2.5 py-1 md:flex">
+            <span className={`h-1.5 w-1.5 rounded-full ${replayMode ? "bg-hold" : "bg-pass"}`} aria-hidden="true" />
+            <span className="text-label uppercase text-mute">{replayMode ? "Replay" : "Live"}</span>
+          </div>
+          <WalletControl />
         </div>
       </div>
     </header>

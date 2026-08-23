@@ -27,6 +27,7 @@ type Phase =
   | "authorizing"
   | "authorization-cancelled"
   | "authorization-failed"
+  | "payment-limit-blocked"
   | "contract-expired"
   | "backend-unavailable"
   | "confirming"
@@ -108,6 +109,20 @@ export function QuoteScreen({ quotePrice, plans }: { quotePrice: number; plans: 
       const jobId = existingJobId ?? (await acceptPlan(selected.id)).jobId;
       const buy = await buyPaidResourceAsCustomer(`/api/jobs/authorize?jobId=${jobId}`, wallet.signer);
       if (!buy.ok || !buy.txId) {
+        // A 409 here doesn't necessarily mean payment failed — it's also
+        // what a job that's already PAID/EXECUTING/CLOSED returns (see
+        // api/jobs/authorize's outer GET gate), which happens when this
+        // exact call is retried after a connection drop that hid a real,
+        // already-settled response from the first attempt. That job is
+        // fine — proceed to execution instead of reporting a failure for a
+        // payment that actually succeeded.
+        const status = (buy.body as { status?: string } | undefined)?.status;
+        if (buy.status === 409 && (status === "PAID" || status === "EXECUTING" || status === "CLOSED")) {
+          setPhase("confirming");
+          acceptQuote(amount, selected.id, jobId);
+          router.push("/execution");
+          return;
+        }
         startedRef.current = false;
         if (buy.status === 404 || buy.status === 410) {
           setPhase("contract-expired");
@@ -139,6 +154,13 @@ export function QuoteScreen({ quotePrice, plans }: { quotePrice: number; plans: 
         // request never reached the backend at all — a network/availability
         // problem, not a payment or contract problem.
         setPhase("backend-unavailable");
+      } else if (err instanceof Error && err.message.includes("rejected by spendControls")) {
+        // The x402 client's own spend guard (browser-buyer.ts) refused to
+        // build a payment payload at all — Pera was never asked to sign
+        // anything, so this is neither a settlement failure nor a wallet
+        // rejection. Distinct message: settlement never started.
+        setPhase("payment-limit-blocked");
+        setAuthError(err.message);
       } else {
         setPhase("authorization-failed");
         setAuthError(err instanceof Error ? err.message : String(err));
@@ -339,7 +361,31 @@ export function QuoteScreen({ quotePrice, plans }: { quotePrice: number; plans: 
                     <p className="mt-xs text-body-sm text-mute">
                       The x402 settlement could not be confirmed. No provider execution has started.
                     </p>
-                    {authError && <p className="mt-xs text-meta text-faint">{authError}</p>}
+                    {authError && (
+                      <details className="mt-xs text-meta text-faint">
+                        <summary className="cursor-pointer select-none">Technical details</summary>
+                        <p className="mt-xs">{authError}</p>
+                      </details>
+                    )}
+                    <Button className="mt-md" variant="secondary" onClick={() => setPhase("plans")}>
+                      Try again
+                    </Button>
+                  </div>
+                )}
+
+                {phase === "payment-limit-blocked" && (
+                  <div className="animate-scale-in rounded-lg border border-fail-line bg-fail-dim p-md">
+                    <p className="text-label uppercase text-fail">Payment authorization blocked</p>
+                    <p className="mt-xs text-body-sm text-mute">
+                      This contract exceeds the Customer Agent&rsquo;s configured payment limit. No wallet signature
+                      was requested.
+                    </p>
+                    {authError && (
+                      <details className="mt-xs text-meta text-faint">
+                        <summary className="cursor-pointer select-none">Technical details</summary>
+                        <p className="mt-xs">{authError}</p>
+                      </details>
+                    )}
                     <Button className="mt-md" variant="secondary" onClick={() => setPhase("plans")}>
                       Try again
                     </Button>

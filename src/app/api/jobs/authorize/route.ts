@@ -89,6 +89,14 @@ export async function GET(request: NextRequest) {
   if (!job) {
     return NextResponse.json({ error: "unknown or expired job" }, { status: 404 });
   }
+  if (job.status !== "ACCEPTED") {
+    // A job that's already PAID/EXECUTING/CLOSED must never be offered a
+    // fresh 402 — that would let a duplicate/retried authorize request (a
+    // double click, a browser retry, a re-run of this exact call) charge
+    // the customer a second real payment for a contract already settled.
+    // No payment-required header is issued at all in this case.
+    return NextResponse.json({ jobId: job.jobId, status: job.status, acceptedPrice: job.acceptedPrice }, { status: 409 });
+  }
   return x402Gated(request);
 }
 

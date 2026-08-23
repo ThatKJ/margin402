@@ -14,6 +14,17 @@ export interface BrowserBuyResult {
 }
 
 /**
+ * A safety rail independent of Margin402's own prices, not a mirror of the
+ * current plan lineup — @x402/core's client defaults this to $1, which
+ * silently blocked every real customer payment above $1 (Best Value $1.20,
+ * Highest Confidence $1.35) before Pera was ever asked to sign anything.
+ * Set with headroom above the current highest contract so the app's price
+ * ceiling can move without this needing to move in lockstep, while still
+ * rejecting an obviously-wrong requirement (e.g. $2.01) client-side.
+ */
+export const CUSTOMER_MAX_PAYMENT_PER_CONTRACT = "$2";
+
+/**
  * Browser-side counterpart to lib/x402/buyer.ts — identical protocol
  * (402 -> sign -> retry -> facilitator verify/settle), different signer.
  * The server buyer signs with the Margin402 treasury (Layer 2, paying
@@ -23,10 +34,9 @@ export interface BrowserBuyResult {
  * via `signer.signTransactions`, this module only ever sees signed bytes.
  */
 export async function buyPaidResourceAsCustomer(url: string, signer: ClientAvmSigner): Promise<BrowserBuyResult> {
-  const client = new x402Client().register(
-    ALGORAND_NETWORK,
-    new ExactAvmScheme(signer, { algodUrl: "https://testnet-api.algonode.cloud" }),
-  );
+  const client = new x402Client()
+    .register(ALGORAND_NETWORK, new ExactAvmScheme(signer, { algodUrl: "https://testnet-api.algonode.cloud" }))
+    .setSpendControls({ maxAmountPerPayment: CUSTOMER_MAX_PAYMENT_PER_CONTRACT });
 
   const fetchWithPay = wrapFetchWithPayment(fetch, client);
 

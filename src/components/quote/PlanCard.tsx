@@ -50,16 +50,27 @@ export function PlanCard({
         </p>
       </div>
 
-      <dl className="mt-md grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line text-center">
-        <div className="bg-panel px-2 py-sm">
-          <dt className="text-label uppercase text-faint">Confidence</dt>
-          <dd className="tabular mt-1 text-data font-semibold">{Math.round(plan.firstAttemptPassRate * 100)}%</dd>
-        </div>
-        <div className="bg-panel px-2 py-sm">
-          <dt className="text-label uppercase text-faint">Starts with</dt>
-          <dd className="tabular mt-1 text-data font-semibold">{plan.strategyOrder[0]}</dd>
-        </div>
+      <dl className="mt-md flex flex-col gap-1.5 rounded-lg border border-line bg-well p-md">
+        {plan.cardMetrics.map((m) => (
+          <div key={m.label} className="flex items-baseline justify-between gap-sm">
+            <dt className="text-label uppercase text-faint">{m.label}</dt>
+            <dd className="tabular text-body-sm font-medium text-ink">{m.value}</dd>
+          </div>
+        ))}
       </dl>
+
+      <div className="mt-sm flex flex-col gap-1.5">
+        {plan.qualitativeMetrics.map((m) => (
+          <div key={m.label} className="flex items-center justify-between gap-sm">
+            <span className="text-label uppercase text-faint">{m.label}</span>
+            <div className="flex gap-1" role="img" aria-label={`${m.label}: ${m.level} of 5`}>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <span key={i} className={`h-1.5 w-1.5 rounded-full ${i < m.level ? "bg-ink" : "bg-line-strong"}`} aria-hidden="true" />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
 
       <ul className="mt-md flex flex-col gap-1.5">
         {plan.tradeoffs.slice(0, 3).map((t) => (

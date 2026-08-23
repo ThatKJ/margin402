@@ -14,6 +14,7 @@ import { Badge } from "@/components/primitives/Badge";
 import { Button } from "@/components/primitives/Button";
 import { Spinner } from "@/components/primitives/Indicators";
 import { PlanCard } from "./PlanCard";
+import { ProviderMarket } from "./ProviderMarket";
 import type { CustomerPlan } from "@/lib/economics/plans";
 import type { PlanId } from "@/lib/orchestrator/types";
 import type { CustomerOfferResult } from "@/lib/actions/quote-actions";
@@ -251,6 +252,8 @@ export function QuoteScreen({ quotePrice, plans }: { quotePrice: number; plans: 
           </div>
         ))}
       </div>
+
+      <ProviderMarket />
 
       <div id="plan-confirm" className="mt-xl scroll-mt-28">
         {phase === "expired" ? (

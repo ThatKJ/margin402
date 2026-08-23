@@ -14,12 +14,20 @@ export interface StrategyDef {
    *     in the canonical demo since it either passes or the honouring rule closes the job.
    */
   maxAttempts: number;
+  /**
+   * A short, truthful customer-facing characterization of this provider's
+   * tradeoff — shown next to its pSuccess in the quote UI's provider-market
+   * table (see plans.ts/PlanCard.tsx). Kept here, not duplicated in React,
+   * for the same reason pSuccess itself lives here: one place a judge or a
+   * future strategy addition can read to know what's actually on offer.
+   */
+  marketNote: string;
 }
 
 export const STRATEGY_CATALOG: StrategyDef[] = [
-  { id: "s1", label: "Draft", pSuccess: 0.35, maxAttempts: 1 },
-  { id: "s2", label: "Repair", pSuccess: 0.45, maxAttempts: 2 },
-  { id: "s3", label: "Premium", pSuccess: 0.85, maxAttempts: 3 },
+  { id: "s1", label: "Draft", pSuccess: 0.35, maxAttempts: 1, marketNote: "Low cost" },
+  { id: "s2", label: "Repair", pSuccess: 0.45, maxAttempts: 2, marketNote: "Feedback-aware" },
+  { id: "s3", label: "Premium", pSuccess: 0.85, maxAttempts: 3, marketNote: "Highest reliability" },
 ];
 
 export function strategyById(id: StrategyId): StrategyDef {

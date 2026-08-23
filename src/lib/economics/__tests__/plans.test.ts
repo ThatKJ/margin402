@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { buildPlans, buildPlan, toCustomerPlan } from "@/lib/economics/plans";
 import { LOCKED_QUOTE } from "@/lib/economics/quote";
+import { STRATEGY_CATALOG } from "@/lib/providers/strategies";
 import { availableStrategiesForPlan } from "@/lib/orchestrator/plan-policy";
 import type { PlanId } from "@/lib/orchestrator/types";
+
+/** Terms this product must never use for firstAttemptPassRate — see plans.ts's field doc. */
+const FORBIDDEN_CONFIDENCE_LABELS = ["plan confidence", "success guarantee", "completion probability"];
 
 const PLANS = buildPlans();
 
@@ -71,6 +75,72 @@ describe("toCustomerPlan — internal cost model must not reach a customer surfa
       expect(customerPlan.price).toBe(plan.price);
       expect(customerPlan.firstAttemptPassRate).toBe(plan.firstAttemptPassRate);
     }
+  });
+
+  it("keeps cardMetrics and qualitativeMetrics on the customer-safe DTO", () => {
+    for (const plan of PLANS) {
+      const customerPlan = toCustomerPlan(plan);
+      expect(customerPlan.cardMetrics).toEqual(plan.cardMetrics);
+      expect(customerPlan.qualitativeMetrics).toEqual(plan.qualitativeMetrics);
+    }
+  });
+});
+
+describe("plan card presentation — the 'why do two plans show the same 35%' bug", () => {
+  const byId = new Map(PLANS.map((p) => [p.id, p]));
+
+  it("never mislabels firstAttemptPassRate as overall plan confidence, a guarantee, or a completion probability", () => {
+    const serialized = JSON.stringify(PLANS.map((p) => p.cardMetrics)).toLowerCase();
+    for (const forbidden of FORBIDDEN_CONFIDENCE_LABELS) {
+      expect(serialized).not.toContain(forbidden);
+    }
+  });
+
+  it("shows Lowest Cost and Highest Confidence's real first-attempt estimate, sourced from firstAttemptPassRate", () => {
+    for (const id of ["lowest-cost", "highest-confidence"] as PlanId[]) {
+      const plan = byId.get(id)!;
+      const row = plan.cardMetrics.find((m) => m.label === "First-attempt estimate");
+      expect(row).toBeDefined();
+      expect(row!.value).toBe(`${Math.round(plan.firstAttemptPassRate * 100)}%`);
+    }
+  });
+
+  it("does not lead Best Value's card with a first-attempt-estimate row — its differentiator is adaptive selection, not entry pSuccess", () => {
+    const bestValue = byId.get("best-value")!;
+    expect(bestValue.cardMetrics.some((m) => m.label === "First-attempt estimate")).toBe(false);
+  });
+
+  it("every plan's entry-provider row names a real STRATEGY_CATALOG label matching its entryStrategyId", () => {
+    const labelById = new Map(STRATEGY_CATALOG.map((s) => [s.id, s.label]));
+    for (const plan of PLANS) {
+      const row = plan.cardMetrics.find((m) => m.label === "Entry provider");
+      expect(row).toBeDefined();
+      expect(row!.value).toBe(labelById.get(plan.entryStrategyId as (typeof STRATEGY_CATALOG)[number]["id"]));
+    }
+  });
+
+  it("gives every plan exactly two qualitative axes, each a 1-5 level (never a disguised percentage)", () => {
+    for (const plan of PLANS) {
+      expect(plan.qualitativeMetrics).toHaveLength(2);
+      for (const m of plan.qualitativeMetrics) {
+        expect(Number.isInteger(m.level)).toBe(true);
+        expect(m.level).toBeGreaterThanOrEqual(1);
+        expect(m.level).toBeLessThanOrEqual(5);
+      }
+    }
+  });
+
+  it("Lowest Cost and Best Value share the same entry provider (Draft) but present visibly different card content", () => {
+    const lowestCost = byId.get("lowest-cost")!;
+    const bestValue = byId.get("best-value")!;
+    // The actual source of the original bug: both plans legitimately enter
+    // with Draft, so their raw firstAttemptPassRate is identical. The fix
+    // is presentation, not economics — assert the two cards' label sets
+    // differ even though this one underlying number does not.
+    expect(lowestCost.entryStrategyId).toBe(bestValue.entryStrategyId);
+    const lowestCostLabels = lowestCost.cardMetrics.map((m) => m.label);
+    const bestValueLabels = bestValue.cardMetrics.map((m) => m.label);
+    expect(lowestCostLabels).not.toEqual(bestValueLabels);
   });
 });
 

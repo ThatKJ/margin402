@@ -4,6 +4,23 @@ import { STRATEGY_CATALOG } from "@/lib/providers/strategies";
 import { priceForRound } from "@/lib/providers/price-curve";
 import type { PlanId } from "@/lib/orchestrator/types";
 
+/** A label/value pair for a plan card's face — see CustomerPlan.cardMetrics. */
+export interface PlanCardMetric {
+  label: string;
+  value: string;
+}
+
+/**
+ * A qualitative (not probabilistic) 1-5 rating of how strongly a plan leans
+ * on some axis — e.g. cost priority, adaptivity. Never a disguised
+ * probability: these describe policy character, not a modeled chance of
+ * success, which is what firstAttemptPassRate is for.
+ */
+export interface PlanQualitativeMetric {
+  label: string;
+  level: 1 | 2 | 3 | 4 | 5;
+}
+
 export interface ExecutionPlan {
   id: PlanId;
   name: string;
@@ -11,6 +28,13 @@ export interface ExecutionPlan {
   description: string;
   recommended: boolean;
   price: number;
+  /**
+   * The entry strategy's modeled probability of passing on its first
+   * attempt — sourced from STRATEGY_CATALOG, never recalibrated for
+   * display. Distinct from a verification result (e.g. "7/8 tests") and
+   * from any notion of overall plan completion probability, which this
+   * product does not currently compute (see cardMetrics/PlanCard.tsx).
+   */
   firstAttemptPassRate: number;
   entryStrategyId: string;
   expectedCostToSuccess: number;
@@ -23,6 +47,16 @@ export interface ExecutionPlan {
   refundPolicy: string;
   tradeoffs: string[];
   recommendationReason?: string;
+  /**
+   * What a plan card actually shows on its face — deliberately different
+   * per plan (a different fourth row for Best Value than for the other
+   * two) so the cards read as different policies rather than one template
+   * with different numbers. Built from real plan fields; never a second
+   * copy of a number that already exists elsewhere on ExecutionPlan.
+   */
+  cardMetrics: PlanCardMetric[];
+  /** Exactly two qualitative axes per plan — see PlanQualitativeMetric. */
+  qualitativeMetrics: [PlanQualitativeMetric, PlanQualitativeMetric];
 }
 
 const ROUND = 1;
@@ -83,6 +117,16 @@ export function buildPlan(planId: PlanId): ExecutionPlan {
         "Slower expected completion",
         "Outcome certainty arrives later in the run",
       ],
+      cardMetrics: [
+        { label: "Strategy", value: "Cheapest-first" },
+        { label: "Entry provider", value: entry.label },
+        { label: "First-attempt estimate", value: `${Math.round(entry.pSuccess * 100)}%` },
+        { label: "Escalation", value: "After tier exhaustion" },
+      ],
+      qualitativeMetrics: [
+        { label: "Cost priority", level: 5 },
+        { label: "Reliability", level: 2 },
+      ],
     };
   }
 
@@ -117,10 +161,21 @@ export function buildPlan(planId: PlanId): ExecutionPlan {
         "Higher upfront price",
         "Fastest expected completion",
       ],
+      cardMetrics: [
+        { label: "Strategy", value: "Reliability-first" },
+        { label: "Entry provider", value: entry.label },
+        { label: "First-attempt estimate", value: `${Math.round(entry.pSuccess * 100)}%` },
+        { label: "Goal", value: "Fastest path to verification" },
+      ],
+      qualitativeMetrics: [
+        { label: "Reliability", level: 5 },
+        { label: "Speed", level: 5 },
+      ],
     };
   }
 
   const best = ranked[0];
+  const bestStrategy = strategies.find((s) => s.id === best.strategyId)!;
   return {
     id: "best-value",
     name: "Best Value",
@@ -152,6 +207,20 @@ export function buildPlan(planId: PlanId): ExecutionPlan {
     ],
     recommendationReason:
       "Minimizes expected cost-to-success while keeping every option available — the strongest balance of price, probability, and adaptivity.",
+    // Deliberately no "First-attempt estimate" row: Best Value's differentiator
+    // is adaptive re-ranking, not the entry provider's first-attempt pSuccess —
+    // leading with that number here is exactly the "why do two cards show the
+    // same 35%" confusion this redesign exists to fix.
+    cardMetrics: [
+      { label: "Strategy", value: "Adaptive economics" },
+      { label: "Entry provider", value: bestStrategy.label },
+      { label: "Decision model", value: "Re-ranked every round" },
+      { label: "Goal", value: "Lowest expected cost to success" },
+    ],
+    qualitativeMetrics: [
+      { label: "Cost efficiency", level: 4 },
+      { label: "Adaptivity", level: 5 },
+    ],
   };
 }
 

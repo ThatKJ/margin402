@@ -100,7 +100,7 @@ export function StatementScreen() {
             x402 settlement
           </div>
           <h1 className="mt-2 text-price text-ink">
-            {outcome === "VERIFIED" ? "Verified outcome" : outcome === "REFUNDED" ? "Refunded" : "Job failed"}
+            {outcome === "VERIFIED" ? "Verified outcome" : outcome === "REFUNDED" ? "Contract refunded" : "Execution failed"}
           </h1>
         </div>
         <div className="flex flex-col gap-xs text-right md:w-64">

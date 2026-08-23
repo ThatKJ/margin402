@@ -23,7 +23,7 @@ export function X402() {
             <p className="flex items-center gap-sm text-label uppercase text-faint">
               <span className="tabular text-accent">06</span>
               <span className="h-px w-6 bg-line-strong" aria-hidden="true" />
-              x402 · machine-to-machine payment
+              How agentic payments work
             </p>
           </Reveal>
           <Reveal delay={60}>

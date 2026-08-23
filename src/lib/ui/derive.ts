@@ -14,6 +14,8 @@ export interface PaidRow {
   passed: number;
   total: number;
   verified: boolean;
+  /** True only when the payment event carried a real on-chain transaction id. */
+  settledOnChain: boolean;
 }
 
 export interface RejectedRow {
@@ -56,7 +58,7 @@ export interface ExecutionView {
 export function deriveExecutionView(events: JobEvent[]): ExecutionView {
   const rows: TimelineRow[] = [];
   const seenRejections = new Set<string>();
-  const pendingPayments = new Map<number, { strategyId: StrategyId; price: number }>();
+  const pendingPayments = new Map<number, { strategyId: StrategyId; price: number; txId?: string }>();
   let s3BasePrice: number | null = null;
   let spent = 0;
   let outcome: JobOutcome | null = null;
@@ -88,7 +90,7 @@ export function deriveExecutionView(events: JobEvent[]): ExecutionView {
     }
     if (event.type === "payment") {
       spent += event.price;
-      pendingPayments.set(event.round, { strategyId: event.strategyId, price: event.price });
+      pendingPayments.set(event.round, { strategyId: event.strategyId, price: event.price, txId: event.txId });
     }
     if (event.type === "verification") {
       const pending = pendingPayments.get(event.round);
@@ -101,6 +103,7 @@ export function deriveExecutionView(events: JobEvent[]): ExecutionView {
           passed: event.passed,
           total: event.total,
           verified: event.verified,
+          settledOnChain: !!pending.txId,
         });
       }
     }

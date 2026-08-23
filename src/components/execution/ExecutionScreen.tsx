@@ -24,27 +24,56 @@ export function ExecutionScreen() {
   const scrollAnchorRef = useRef<HTMLDivElement | null>(null);
   const reducedMotion = usePrefersReducedMotion();
   const [streamOpen, setStreamOpen] = useState(false);
+  const [streamLost, setStreamLost] = useState(false);
   const activePlanId = planId ?? "best-value";
 
   useEffect(() => {
     if (revenue === null) router.replace("/quote");
   }, [revenue, router]);
 
+  // Reconnect policy: the server's own idempotency guards make retries safe
+  // (409 rather than double payment), so transient drops — including the
+  // dev Strict-Mode mount/unmount race — recover automatically instead of
+  // wedging a live job behind a dead EventSource.
   useEffect(() => {
-    if (revenue === null || jobId === null || hasEvents) return;
+    if (revenue === null || jobId === null || hasEvents || outcome !== null) return;
 
-    const source = new EventSource(`/api/jobs/execute?revenue=${revenue}&jobId=${jobId}&planId=${activePlanId}`);
-    source.onopen = () => setStreamOpen(true);
-    source.onmessage = (message) => {
-      const event: JobEvent = JSON.parse(message.data);
-      pushEvent(event);
-    };
-    source.onerror = () => {
-      source.close();
-      setStreamOpen(false);
+    let source: EventSource | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let attempts = 0;
+    let disposed = false;
+
+    const connect = () => {
+      if (disposed) return;
+      source = new EventSource(`/api/jobs/execute?revenue=${revenue}&jobId=${jobId}&planId=${activePlanId}`);
+      source.onopen = () => {
+        if (!disposed) {
+          setStreamOpen(true);
+        }
+      };
+      source.onmessage = (message) => {
+        const event: JobEvent = JSON.parse(message.data);
+        pushEvent(event);
+      };
+      source.onerror = () => {
+        source?.close();
+        if (disposed) return;
+        setStreamOpen(false);
+        if (attempts >= 3) {
+          setStreamLost(true);
+          return;
+        }
+        attempts += 1;
+        retryTimer = setTimeout(connect, 1200 * attempts);
+      };
     };
 
-    return () => source.close();
+    connect();
+    return () => {
+      disposed = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      source?.close();
+    };
   }, [revenue, jobId]);
 
   const view = useMemo(() => deriveExecutionView(events), [events]);
@@ -91,7 +120,13 @@ export function ExecutionScreen() {
             <span className="text-accent">Plan · {PLAN_NAMES[activePlanId]}</span>
           </div>
           <h1 className="text-headline leading-tight text-ink">
-            {running ? "Working toward a verified outcome" : displayOutcome === "VERIFIED" ? "Outcome verified" : "Execution closed"}
+            {running
+              ? "Working toward a verified outcome"
+              : displayOutcome === "VERIFIED"
+                ? "Outcome verified"
+                : displayOutcome === "REFUNDED"
+                  ? "Contract refunded"
+                  : "Execution failed"}
           </h1>
           <div className="mt-xs flex items-center gap-sm font-mono text-data text-faint">
             <span>parseDuration()</span>
@@ -119,9 +154,16 @@ export function ExecutionScreen() {
         </div>
       </div>
 
-      {!streamOpen && running && events.length > 0 && (
-        <p className="mb-lg rounded-md border border-fail-line bg-fail-dim px-md py-sm text-body-sm text-fail" role="alert">
-          Connection to orchestrator closed. Refresh to resume streaming.
+      {outcome === null && events.length > 0 && !streamOpen && (
+        <p
+          className={`mb-lg rounded-md border px-md py-sm text-body-sm ${
+            streamLost ? "border-fail-line bg-fail-dim text-fail" : "border-hold/30 bg-hold-dim text-hold"
+          }`}
+          role="alert"
+        >
+          {streamLost
+            ? "Connection to the orchestrator was lost before completion. No further provider spending will occur — start a new job to continue."
+            : "Connection interrupted. Execution state is being protected — reconnecting…"}
         </p>
       )}
 
@@ -149,8 +191,34 @@ export function ExecutionScreen() {
         <div ref={scrollAnchorRef} />
       </ol>
 
-      {running && revealed.length === view.rows.length && !pending && <PendingIndicator />}
+      {running && revealed.length === view.rows.length && !pending && <PhaseIndicator events={events} streamOpen={streamOpen} />}
     </section>
+  );
+}
+
+/**
+ * Loading copy derived strictly from the last real event — never invented.
+ * Before any event arrives the stream is connecting; after each event the
+ * label names the step that is genuinely in flight next.
+ */
+function PhaseIndicator({ events, streamOpen }: { events: JobEvent[]; streamOpen: boolean }) {
+  const last = events.at(-1);
+  let phase = "Connecting to the orchestrator…";
+  if (!streamOpen && events.length === 0) phase = "Requesting service…";
+  else if (!last) phase = streamOpen ? "Requesting service…" : "Connecting to the orchestrator…";
+  else if (last.type === "decision") phase = `Selecting provider — ${strategyLabel(last.step.selected?.strategyId ?? "")} chosen`;
+  else if (last.type === "payment")
+    phase = last.txId ? "Settled on Algorand · receiving provider result…" : "Awaiting x402 settlement…";
+  else if (last.type === "verification") phase = last.verified ? "Preparing outcome statement…" : "Re-evaluating economics…";
+  return (
+    <div className="mt-lg flex items-center gap-2 py-2 text-xs text-mute" role="status" aria-live="polite">
+      <span className="flex gap-1">
+        {[0, 150, 300].map((delay) => (
+          <span key={delay} className="h-1.5 w-1.5 animate-bounce rounded-full bg-mute" style={{ animationDelay: `${delay}ms` }} />
+        ))}
+      </span>
+      {phase}
+    </div>
   );
 }
 
@@ -309,11 +377,10 @@ function AttemptCard({ row, previous, verificationEvent }: AttemptCardProps) {
        * ("no hashes... above the fold"). This row only confirms verification
        * ran; the receipt with the real txId lives on /statement.
        */}
-      {verificationEvent && (
-        <div className="mt-md flex items-center justify-between text-meta text-faint">
-          <span>Settled</span>
-        </div>
-      )}
+      <div className="mt-md flex items-center justify-between text-meta text-faint">
+        <span>x402 · 402 → signed → retried → facilitator verified</span>
+        <span>{row.settledOnChain ? "Settled on Algorand Testnet" : "No on-chain settlement recorded"}</span>
+      </div>
     </div>
   );
 }
@@ -432,19 +499,6 @@ function Bar({ label, value, max, tone }: { label: string; value: number; max: n
 
 function Tag({ children }: { children: React.ReactNode }) {
   return <span className="rounded-sm border border-line bg-panel-3 px-2 py-0.5 font-mono text-[10px] text-mute">{children}</span>;
-}
-
-function PendingIndicator() {
-  return (
-    <div className="mt-lg flex items-center gap-2 py-2 text-xs text-mute" role="status" aria-label="Working">
-      <span className="flex gap-1">
-        {[0, 150, 300].map((delay) => (
-          <span key={delay} className="h-1.5 w-1.5 animate-bounce rounded-full bg-mute" style={{ animationDelay: `${delay}ms` }} />
-        ))}
-      </span>
-      Evaluating the next available execution path…
-    </div>
-  );
 }
 
 export type { JobOutcome };

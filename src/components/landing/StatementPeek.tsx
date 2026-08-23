@@ -33,10 +33,10 @@ export function StatementPeek() {
             </div>
             <div className="grid grid-cols-1 gap-px bg-line sm:grid-cols-3">
               {NUMBERS.map((n) => (
-                <div key={n.k} className="bg-panel px-lg py-xl">
+                <div key={n.k} className="bg-panel px-sm py-xl sm:px-md">
                   <p className="text-label uppercase text-faint">{n.k}</p>
                   <p
-                    className={`tabular mt-xs text-stat ${n.tone === "fail" ? "text-fail" : ""}`}
+                    className={`tabular mt-xs text-headline whitespace-nowrap ${n.tone === "fail" ? "text-fail" : ""}`}
                   >
                     {n.v}
                   </p>

@@ -1,7 +1,11 @@
 import { describe, it, expect, beforeAll } from "vitest";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import algosdk from "algosdk";
+import { toClientAvmSigner } from "@x402/avm";
 import { NextRequest } from "next/server";
-import { createJob, markPaid, markExecuting } from "@/lib/state/job-store";
+import { createJob, getJob, markPaid, markExecuting } from "@/lib/state/job-store";
+import { buyPaidResourceAsCustomer } from "@/lib/x402/browser-buyer";
 
 // A fresh, syntactically-valid, unfunded test wallet — set before any route
 // module is imported so getTreasurySigner()'s lazy cache never sees a real
@@ -68,4 +72,51 @@ describe("/api/jobs/authorize — payment safety", () => {
     const routeModule = await import("../authorize/route");
     expect((routeModule as { POST?: unknown }).POST).toBeUndefined();
   });
+
+  it("a payment attempt that never actually settles (unfunded signer) leaves the job ACCEPTED, never stuck at PAID", async () => {
+    // Regression for a real finding: withX402 runs the wrapped handler
+    // (paidHandler) once a payment is VERIFIED but before it's actually
+    // SETTLED on-chain. The handler used to call markPaid() itself, so a
+    // payment that failed at the settle step (a real, not hypothetical,
+    // failure mode — balance/network/facilitator issues between verify and
+    // settle) would still leave the job stuck PAID with no money having
+    // moved: permanently blocking a legitimate retry behind the
+    // duplicate-payment 409 guard, and worse, leaving the job looking
+    // execute-eligible. markPaid() now only ever runs from
+    // lib/x402/server.ts's onAfterSettle hook, which fires only on
+    // confirmed settlement success — this exercises the real two-round-trip
+    // x402 flow end to end against an unfunded signer to prove it.
+    const { GET } = await import("../authorize/route");
+    const job = await createJob("lowest-cost", 1);
+
+    const server = createServer((req, res) => {
+      (async () => {
+        const url = `http://127.0.0.1${req.url}`;
+        const headers = new Headers();
+        for (const [key, value] of Object.entries(req.headers)) {
+          if (typeof value === "string") headers.set(key, value);
+        }
+        const response = await GET(new NextRequest(url, { headers }));
+        res.writeHead(response.status, Object.fromEntries(response.headers.entries()));
+        res.end(Buffer.from(await response.arrayBuffer()));
+      })().catch((err) => {
+        res.writeHead(500).end(String(err));
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as AddressInfo).port;
+
+    try {
+      const unfundedAccount = algosdk.generateAccount();
+      const signer = toClientAvmSigner(Buffer.from(unfundedAccount.sk).toString("base64"));
+      const buy = await buyPaidResourceAsCustomer(`http://127.0.0.1:${port}/api/jobs/authorize?jobId=${job.jobId}`, signer);
+      expect(buy.ok).toBe(false); // an unfunded signer cannot actually settle
+
+      const after = await getJob(job.jobId);
+      expect(after?.status).toBe("ACCEPTED");
+      expect(after?.customerTxId).toBeUndefined();
+    } finally {
+      server.close();
+    }
+  }, 20000);
 });

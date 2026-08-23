@@ -4,7 +4,7 @@ import type { HTTPRequestContext } from "@x402/core/server";
 import { resourceServer } from "@/lib/x402/server";
 import { getTreasurySigner } from "@/lib/x402/wallet";
 import { ALGORAND_NETWORK } from "@/lib/x402/network";
-import { getJob, markPaid } from "@/lib/state/job-store";
+import { getJob } from "@/lib/state/job-store";
 
 /**
  * The customer-facing x402 endpoint — Layer 1 of the two-sided x402 story
@@ -48,16 +48,25 @@ interface AuthorizeResponse {
 const paidHandler = async (request: NextRequest): Promise<NextResponse<AuthorizeResponse>> => {
   const jobId = request.nextUrl.searchParams.get("jobId");
   // Re-checked here (not just in the outer GET gate) because this is what
-  // actually runs after a real payment settles — if the job vanished in
-  // the handful of milliseconds between the outer check and here, failing
+  // actually runs after a payment is VERIFIED — if the job vanished in the
+  // handful of milliseconds between the outer check and here, failing
   // closed is correct: better a false "job missing" than silently
   // fabricating a PAID record with nothing behind it.
   const job = jobId ? await getJob(jobId) : undefined;
   if (!job) {
     return NextResponse.json({ error: "unknown or expired job" }, { status: 404 });
   }
-  const updated = await markPaid(job.jobId);
-  return NextResponse.json({ jobId: updated!.jobId, status: updated!.status, acceptedPrice: updated!.acceptedPrice });
+  // Deliberately does NOT call markPaid() here. withX402 runs this handler
+  // once a payment is VERIFIED but before it's actually SETTLED on-chain —
+  // if this handler marked the job PAID and settlement then genuinely
+  // failed (a real possibility: a balance/network/facilitator failure
+  // between verify and settle), the job would be stuck PAID with no money
+  // ever having moved, permanently blocking a legitimate retry behind the
+  // duplicate-payment 409 guard above, and worse, leaving it looking
+  // execute-eligible. The only trustworthy place to mark PAID is
+  // lib/x402/server.ts's onAfterSettle hook, which fires only once the
+  // facilitator has confirmed real, successful settlement.
+  return NextResponse.json({ jobId: job.jobId, status: job.status, acceptedPrice: job.acceptedPrice });
 };
 
 const x402Gated = withX402(

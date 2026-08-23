@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
     const result = evaluateOfferForCustomer(body.offer, LOCKED_QUOTE);
     if (result.decision === "ACCEPT") {
       const planId = (typeof body.planId === "string" ? body.planId : "best-value") as PlanId;
-      const job = createJob(planId, result.offer);
+      const job = await createJob(planId, result.offer);
       return NextResponse.json({ ...workload, ...result, jobId: job.jobId, authorize: authorizeEndpoint(job.jobId), accept: acceptEndpoint });
     }
     return NextResponse.json({ ...workload, ...result });
@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
   if (typeof body.planId === "string" && body.accept === true) {
     const selectedPlan = plans.find((p) => p.id === body.planId);
     if (selectedPlan) {
-      const job = createJob(selectedPlan.id, selectedPlan.price);
+      const job = await createJob(selectedPlan.id, selectedPlan.price);
       return NextResponse.json({
         ...workload,
         selectedPlan,

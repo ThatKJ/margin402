@@ -27,7 +27,7 @@ export async function submitCounteroffer(offer: number, planId: PlanId): Promise
   }
   const result = evaluateOfferForCustomer(offer, LOCKED_QUOTE);
   if (result.decision === "ACCEPT") {
-    const job = createJob(planId, result.offer);
+    const job = await createJob(planId, result.offer);
     return { ...result, jobId: job.jobId };
   }
   return result;
@@ -41,6 +41,6 @@ export async function submitCounteroffer(offer: number, planId: PlanId): Promise
 export async function acceptPlan(planId: PlanId): Promise<{ jobId: string; acceptedPrice: number }> {
   const plan = buildPlans().find((p) => p.id === planId);
   if (!plan) throw new Error(`unknown plan: ${planId}`);
-  const job = createJob(planId, plan.price);
+  const job = await createJob(planId, plan.price);
   return { jobId: job.jobId, acceptedPrice: job.acceptedPrice };
 }

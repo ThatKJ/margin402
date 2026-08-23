@@ -27,6 +27,8 @@ type Phase =
   | "authorizing"
   | "authorization-cancelled"
   | "authorization-failed"
+  | "contract-expired"
+  | "backend-unavailable"
   | "confirming"
   | "expired";
 
@@ -83,6 +85,15 @@ export function QuoteScreen({ quotePrice, plans }: { quotePrice: number; plans: 
    * that genuinely resolves does execution get authorized to start; a
    * declined wallet signature never reaches "confirming"/"Job failed", it's
    * its own cancelled state, because no autonomous run ever began.
+   *
+   * Failure classification matters: a 404/410 here means the contract
+   * itself is missing or expired — nothing about payment or settlement
+   * failed, because no payment was ever requested for it (see
+   * api/jobs/authorize's outer GET gate, which returns 404 before withX402
+   * ever runs for an unknown job). That's a completely different situation
+   * from a wallet rejection or a real facilitator settlement failure, and
+   * collapsing all three into one generic "payment not settled" message is
+   * exactly the bug this distinguishes.
    */
   async function handleAccept(amount: number, existingJobId?: string) {
     if (startedRef.current || !selected) return;
@@ -98,10 +109,24 @@ export function QuoteScreen({ quotePrice, plans }: { quotePrice: number; plans: 
       const buy = await buyPaidResourceAsCustomer(`/api/jobs/authorize?jobId=${jobId}`, wallet.signer);
       if (!buy.ok || !buy.txId) {
         startedRef.current = false;
-        setPhase("authorization-failed");
-        setAuthError(`HTTP ${buy.status}`);
+        if (buy.status === 404 || buy.status === 410) {
+          setPhase("contract-expired");
+        } else {
+          setPhase("authorization-failed");
+          setAuthError(`HTTP ${buy.status}`);
+        }
         return;
       }
+      // Report the real, SDK-decoded settlement txId back as receipt
+      // metadata — best-effort only. This can never mark anything paid on
+      // its own (api/jobs/authorize's POST handler requires the job to
+      // already be PAID via the real x402 flow above), so a failure here
+      // doesn't change whether authorization succeeded.
+      void fetch(`/api/jobs/authorize?jobId=${jobId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ txId: buy.txId }),
+      }).catch(() => {});
       setPhase("confirming");
       acceptQuote(amount, selected.id, jobId);
       router.push("/execution");
@@ -109,6 +134,11 @@ export function QuoteScreen({ quotePrice, plans }: { quotePrice: number; plans: 
       startedRef.current = false;
       if (isPeraCancellation(err)) {
         setPhase("authorization-cancelled");
+      } else if (err instanceof TypeError) {
+        // fetch() itself throwing (not an HTTP error response) means the
+        // request never reached the backend at all — a network/availability
+        // problem, not a payment or contract problem.
+        setPhase("backend-unavailable");
       } else {
         setPhase("authorization-failed");
         setAuthError(err instanceof Error ? err.message : String(err));
@@ -307,11 +337,35 @@ export function QuoteScreen({ quotePrice, plans }: { quotePrice: number; plans: 
                   <div className="animate-scale-in rounded-lg border border-fail-line bg-fail-dim p-md">
                     <p className="text-label uppercase text-fail">Payment not settled</p>
                     <p className="mt-xs text-body-sm text-mute">
-                      The x402 payment could not be confirmed. No provider execution has started.
+                      The x402 settlement could not be confirmed. No provider execution has started.
                     </p>
                     {authError && <p className="mt-xs text-meta text-faint">{authError}</p>}
                     <Button className="mt-md" variant="secondary" onClick={() => setPhase("plans")}>
                       Try again
+                    </Button>
+                  </div>
+                )}
+
+                {phase === "contract-expired" && (
+                  <div className="animate-scale-in rounded-lg border border-line-strong bg-panel-2 p-md">
+                    <p className="text-label uppercase text-mute">Contract expired</p>
+                    <p className="mt-xs text-body-sm text-mute">
+                      This job authorization is no longer available. Request a fresh outcome quote to continue.
+                    </p>
+                    <Button className="mt-md" variant="secondary" onClick={restartValidity}>
+                      Generate new quote
+                    </Button>
+                  </div>
+                )}
+
+                {phase === "backend-unavailable" && (
+                  <div className="animate-scale-in rounded-lg border border-fail-line bg-fail-dim p-md">
+                    <p className="text-label uppercase text-fail">Execution service unavailable</p>
+                    <p className="mt-xs text-body-sm text-mute">
+                      Margin402 could not be reached. No payment was requested.
+                    </p>
+                    <Button className="mt-md" variant="secondary" onClick={() => setPhase("plans")}>
+                      Retry
                     </Button>
                   </div>
                 )}

@@ -20,9 +20,19 @@ import { getJob, markPaid } from "@/lib/state/job-store";
  * spends from its own balance to pay providers (Layer 2, unchanged,
  * lib/x402/buyer.ts) — two distinct payment directions, same signer.
  *
+ * Job existence is checked HERE, before withX402 ever runs — not inside
+ * the price callback. withX402's simple RouteConfig API has no supported
+ * way to abort the 402 challenge itself from a price callback (a thrown
+ * price fn just becomes an opaque 500, still after a payment requirement
+ * may already be under construction); gating the request before it ever
+ * reaches the x402-wrapped handler means an unknown/expired job gets a
+ * clean 404 with no payment-required response, no wallet prompt, and no
+ * $0.00 contract ever offered.
+ *
  * Usage:
  *   curl -i "http://localhost:3000/api/jobs/authorize?jobId=<jobId>"
- *   # -> 402 with real payment requirements at job.acceptedPrice, until paid
+ *   # unknown job  -> 404, no payment challenge at all
+ *   # known job    -> 402 with real payment requirements at job.acceptedPrice
  */
 function jobIdFromUrl(url: string): string | null {
   return new URL(url).searchParams.get("jobId");
@@ -35,29 +45,36 @@ interface AuthorizeResponse {
   acceptedPrice?: number;
 }
 
-const handler = async (request: NextRequest): Promise<NextResponse<AuthorizeResponse>> => {
+const paidHandler = async (request: NextRequest): Promise<NextResponse<AuthorizeResponse>> => {
   const jobId = request.nextUrl.searchParams.get("jobId");
-  const job = jobId ? getJob(jobId) : undefined;
+  // Re-checked here (not just in the outer GET gate) because this is what
+  // actually runs after a real payment settles — if the job vanished in
+  // the handful of milliseconds between the outer check and here, failing
+  // closed is correct: better a false "job missing" than silently
+  // fabricating a PAID record with nothing behind it.
+  const job = jobId ? await getJob(jobId) : undefined;
   if (!job) {
     return NextResponse.json({ error: "unknown or expired job" }, { status: 404 });
   }
-  const updated = markPaid(job.jobId);
+  const updated = await markPaid(job.jobId);
   return NextResponse.json({ jobId: updated!.jobId, status: updated!.status, acceptedPrice: updated!.acceptedPrice });
 };
 
-export const GET = withX402(
-  handler,
+const x402Gated = withX402(
+  paidHandler,
   {
     accepts: {
       scheme: "exact",
       network: ALGORAND_NETWORK,
       payTo: () => getTreasurySigner().address,
-      price: (context: HTTPRequestContext) => {
+      price: async (context: HTTPRequestContext) => {
         const jobId = jobIdFromUrl(context.adapter.getUrl());
-        const job = jobId ? getJob(jobId) : undefined;
-        // No matching job: price a $0 requirement rather than throwing —
-        // the handler's own 404 is the real, honest error for this case;
-        // a thrown price callback would surface as an opaque 500 instead.
+        const job = jobId ? await getJob(jobId) : undefined;
+        // Reached only when the outer GET below already confirmed the job
+        // exists; a job vanishing in this exact window is a real-but-tiny
+        // race, not the normal "unknown job" case, and $0 here would still
+        // never be quoted to a genuinely-unknown job — the outer 404 gate
+        // already returned before this ever runs for that case.
         return `$${(job?.acceptedPrice ?? 0).toFixed(2)}`;
       },
     },
@@ -65,3 +82,42 @@ export const GET = withX402(
   },
   resourceServer,
 );
+
+export async function GET(request: NextRequest) {
+  const jobId = request.nextUrl.searchParams.get("jobId");
+  const job = jobId ? await getJob(jobId) : undefined;
+  if (!job) {
+    return NextResponse.json({ error: "unknown or expired job" }, { status: 404 });
+  }
+  return x402Gated(request);
+}
+
+/**
+ * Attaches the real customer settlement transaction id to an already-PAID
+ * job, reported by the browser client that just completed the real x402
+ * payment above (it decodes the genuine PAYMENT-RESPONSE header itself,
+ * same as lib/x402/buyer.ts does server-side — see browser-buyer.ts). This
+ * can only ever annotate a job that is already PAID/EXECUTING/CLOSED via
+ * the real x402 flow above; it cannot mark anything paid on its own, so it
+ * carries no authority over money — only over receipt metadata.
+ */
+export async function POST(request: NextRequest) {
+  const jobId = request.nextUrl.searchParams.get("jobId");
+  let body: { txId?: unknown } = {};
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "invalid body" }, { status: 400 });
+  }
+  const job = jobId ? await getJob(jobId) : undefined;
+  if (!job) {
+    return NextResponse.json({ error: "unknown or expired job" }, { status: 404 });
+  }
+  if (job.status === "ACCEPTED") {
+    return NextResponse.json({ error: "job has not been paid yet" }, { status: 409 });
+  }
+  if (typeof body.txId === "string" && body.txId) {
+    await markPaid(job.jobId, body.txId);
+  }
+  return NextResponse.json({ jobId: job.jobId, status: job.status });
+}

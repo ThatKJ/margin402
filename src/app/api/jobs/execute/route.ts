@@ -40,7 +40,7 @@ const settled = new Set<string>();
 
 export async function GET(request: NextRequest) {
   const requestedJobId = request.nextUrl.searchParams.get("jobId");
-  const paidJob = requestedJobId ? getJob(requestedJobId) : undefined;
+  const paidJob = requestedJobId ? await getJob(requestedJobId) : undefined;
 
   // Two ways to reach execution, both real (see quote/route.ts):
   //  - a jobId that resolves to a PAID job record: revenue is that job's
@@ -52,7 +52,16 @@ export async function GET(request: NextRequest) {
   //    machine-to-machine surface that predates the job store.
   let revenue: number;
   if (paidJob) {
-    if (paidJob.status !== "PAID" && paidJob.status !== "EXECUTING") {
+    if (paidJob.status === "EXECUTING" || paidJob.status === "CLOSED") {
+      // Durable duplicate-execution guard, sourced from the job record
+      // itself rather than the in-memory active/settled sets below — those
+      // only protect a single warm instance, and this path exists
+      // specifically because that's not good enough once state has to
+      // survive independent requests. This is the authoritative check for
+      // any jobId that has a job record at all.
+      return new Response("job already authorized and running or finished — this is a retry, not a new job", { status: 409 });
+    }
+    if (paidJob.status !== "PAID") {
       return new Response("job has not been authorized (customer payment not settled)", { status: 402 });
     }
     revenue = paidJob.acceptedPrice;
@@ -80,7 +89,7 @@ export async function GET(request: NextRequest) {
     return new Response("job already running", { status: 409 });
   }
   active.add(jobId);
-  if (paidJob) markExecuting(jobId);
+  if (paidJob) await markExecuting(jobId);
 
   const providerClient =
     process.env.PROVIDER_CLIENT_MODE === "inprocess"
@@ -136,7 +145,7 @@ export async function GET(request: NextRequest) {
         console.error("[jobs/execute] unhandled error", err);
       } finally {
         active.delete(jobId);
-        if (paidJob) markClosed(jobId);
+        if (paidJob) await markClosed(jobId);
         closed = true;
         try {
           controller.close();

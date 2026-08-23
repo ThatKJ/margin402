@@ -58,4 +58,14 @@ describe("/api/jobs/authorize — payment safety", () => {
     expect(res.status).toBe(409);
     expect(res.headers.get("payment-required")).toBeNull();
   });
+
+  it("no longer exposes a POST handler — a client can no longer claim an arbitrary settlement txId", async () => {
+    // Regression for a real finding: this route used to accept {txId} in a
+    // POST body and store it verbatim for any already-PAID job, with no
+    // verification the string was ever a real transaction. The real txId
+    // now comes only from lib/x402/server.ts's onAfterSettle hook, sourced
+    // from the facilitator's own confirmed settlement result.
+    const routeModule = await import("../authorize/route");
+    expect((routeModule as { POST?: unknown }).POST).toBeUndefined();
+  });
 });

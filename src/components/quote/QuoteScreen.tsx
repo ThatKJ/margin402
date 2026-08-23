@@ -154,16 +154,10 @@ export function QuoteScreen({ quotePrice, plans }: { quotePrice: number; plans: 
         }
         return;
       }
-      // Report the real, SDK-decoded settlement txId back as receipt
-      // metadata — best-effort only. This can never mark anything paid on
-      // its own (api/jobs/authorize's POST handler requires the job to
-      // already be PAID via the real x402 flow above), so a failure here
-      // doesn't change whether authorization succeeded.
-      void fetch(`/api/jobs/authorize?jobId=${jobId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ txId: buy.txId }),
-      }).catch(() => {});
+      // The real settlement txId is captured server-side, from the
+      // facilitator's own settle response — see lib/x402/server.ts's
+      // onAfterSettle hook — never reported by the browser. `buy.txId`
+      // here is only ever used for this tab's own local display.
       setPhase("confirming");
       acceptQuote(amount, selected.id, jobId);
       router.push("/execution");

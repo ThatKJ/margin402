@@ -99,33 +99,3 @@ export async function GET(request: NextRequest) {
   }
   return x402Gated(request);
 }
-
-/**
- * Attaches the real customer settlement transaction id to an already-PAID
- * job, reported by the browser client that just completed the real x402
- * payment above (it decodes the genuine PAYMENT-RESPONSE header itself,
- * same as lib/x402/buyer.ts does server-side — see browser-buyer.ts). This
- * can only ever annotate a job that is already PAID/EXECUTING/CLOSED via
- * the real x402 flow above; it cannot mark anything paid on its own, so it
- * carries no authority over money — only over receipt metadata.
- */
-export async function POST(request: NextRequest) {
-  const jobId = request.nextUrl.searchParams.get("jobId");
-  let body: { txId?: unknown } = {};
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "invalid body" }, { status: 400 });
-  }
-  const job = jobId ? await getJob(jobId) : undefined;
-  if (!job) {
-    return NextResponse.json({ error: "unknown or expired job" }, { status: 404 });
-  }
-  if (job.status === "ACCEPTED") {
-    return NextResponse.json({ error: "job has not been paid yet" }, { status: 409 });
-  }
-  if (typeof body.txId === "string" && body.txId) {
-    await markPaid(job.jobId, body.txId);
-  }
-  return NextResponse.json({ jobId: job.jobId, status: job.status });
-}

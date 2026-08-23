@@ -31,6 +31,7 @@ type Phase =
   | "payment-limit-blocked"
   | "contract-expired"
   | "backend-unavailable"
+  | "wallet-is-treasury"
   | "confirming"
   | "expired";
 
@@ -51,10 +52,20 @@ export function QuoteScreen({ quotePrice, plans }: { quotePrice: number; plans: 
   const [authError, setAuthError] = useState<string | null>(null);
   const startedRef = useRef(false);
   const counterInputRef = useRef<HTMLInputElement | null>(null);
+  const [treasuryAddress, setTreasuryAddress] = useState<string | null>(null);
 
   useEffect(() => {
     reset();
   }, [reset]);
+
+  useEffect(() => {
+    fetch("/api/treasury-address")
+      .then((r) => r.json())
+      .then((body: { address?: string }) => {
+        if (body.address) setTreasuryAddress(body.address);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (phase !== "plans" && phase !== "counter-open") return;
@@ -101,6 +112,16 @@ export function QuoteScreen({ quotePrice, plans }: { quotePrice: number; plans: 
     if (startedRef.current || !selected) return;
     if (wallet.status !== "connected" || !wallet.signer) {
       await wallet.connect();
+      return;
+    }
+    // A connected wallet whose address equals the Margin402 treasury's own
+    // address would still settle as a real on-chain transaction, but it
+    // would prove nothing about the two-sided x402 story this demo exists
+    // to show — a customer paying a genuinely distinct Margin402 treasury.
+    // Block before ever requesting a signature rather than produce a
+    // technically-real but misleading self-payment.
+    if (treasuryAddress && wallet.signer.address === treasuryAddress) {
+      setPhase("wallet-is-treasury");
       return;
     }
     startedRef.current = true;
@@ -415,6 +436,20 @@ export function QuoteScreen({ quotePrice, plans }: { quotePrice: number; plans: 
                     </p>
                     <Button className="mt-md" variant="secondary" onClick={() => setPhase("plans")}>
                       Retry
+                    </Button>
+                  </div>
+                )}
+
+                {phase === "wallet-is-treasury" && (
+                  <div className="animate-scale-in rounded-lg border border-hold/30 bg-hold-dim p-md">
+                    <p className="text-label uppercase text-hold">Connect a different wallet</p>
+                    <p className="mt-xs text-body-sm text-mute">
+                      The connected Pera account is the same wallet Margin402 uses as its own treasury. A
+                      payment from it would settle for real but wouldn&rsquo;t demonstrate a genuinely separate
+                      customer wallet paying Margin402. Connect a different funded Testnet wallet to continue.
+                    </p>
+                    <Button className="mt-md" variant="secondary" onClick={() => { wallet.disconnect(); setPhase("plans"); }}>
+                      Disconnect and try again
                     </Button>
                   </div>
                 )}

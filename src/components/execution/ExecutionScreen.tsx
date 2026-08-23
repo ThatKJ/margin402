@@ -154,7 +154,10 @@ export function ExecutionScreen() {
             </div>
           </div>
           <div className="h-1 w-full mt-sm overflow-hidden rounded-full bg-line-strong">
-            <div className="h-full bg-accent" style={{ width: `${revenue > 0 ? (budgetRemaining / revenue) * 100 : 0}%` }} />
+            <div
+              className={`h-full ${budgetRemaining < 0 ? "bg-fail/70" : "bg-accent"}`}
+              style={{ width: `${revenue > 0 ? Math.min(100, (revealedSpent / revenue) * 100) : 0}%` }}
+            />
           </div>
         </div>
       </div>
